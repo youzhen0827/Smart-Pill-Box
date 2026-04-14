@@ -1,1 +1,1 @@
-# Smart-Pill-Box (智慧藥盒)
+# Smart-Pill-Box
