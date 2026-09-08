@@ -1,0 +1,62 @@
+{% extends "core/base.html" %}
+{% block title %}資料集匯入{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-7">
+  <div class="mb-6"><h1 class="text-2xl font-black text-brand">資料集匯入</h1><p class="text-sm text-slate-500 mt-1">可直接在 VSCode/Django 網站上傳 CSV，匯入推薦資料集或本機整理好的藥物資料。</p></div>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"><div class="card p-4 text-center"><div class="text-3xl font-black text-brand">{{ counts.total }}</div><div class="text-xs text-slate-400">全部文件</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-cyan-700">{{ counts.ndc }}</div><div class="text-xs text-slate-400">FDA NDC</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-700">{{ counts.label }}</div><div class="text-xs text-slate-400">FDA Label</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-emerald-700">{{ counts.kaggle }}</div><div class="text-xs text-slate-400">Kaggle CSV</div></div></div>
+  <section class="card p-5 mb-6">
+    <h2 class="font-bold text-brand">兩種匯入方式差別</h2>
+    <div class="grid md:grid-cols-2 gap-4 mt-3 text-sm">
+      <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+        <div class="font-bold text-blue-800">1. FDA 官方 API 同步</div>
+        <p class="text-slate-600 mt-1">輸入單一英文藥名或 NDC，系統線上查 FDA NDC Directory 與 Drug Label。適合快速補一種藥的品牌、學名、製造商、警語與標示資料。</p>
+      </div>
+      <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+        <div class="font-bold text-emerald-800">2. 匯入 CSV 資料集</div>
+        <p class="text-slate-600 mt-1">上傳 Kaggle 或本機 CSV，一次匯入大量藥名、副作用、交互作用或適應症。適合建立 RAG 知識庫，不用一筆一筆查。</p>
+      </div>
+    </div>
+  </section>
+  <section class="card p-5 mb-6">
+    <h2 class="font-bold text-brand">可直接採用的真實 Kaggle 資料集</h2>
+    <p class="text-xs text-slate-500 mt-1">先下載 CSV，再到下方表單上傳。來源欄可填推薦資料集網址、recommended: 名稱，或直接留空。</p>
+    <div class="grid md:grid-cols-3 gap-3 mt-4 text-sm">
+      <a class="rounded-xl border border-slate-200 p-4 hover:border-brand hover:bg-indigo-50" target="_blank" rel="noopener" href="https://www.kaggle.com/datasets/shudhanshusingh/250k-medicines-usage-side-effects-and-substitutes">
+        <div class="font-bold text-brand">250k Medicines Usage, Side Effects and Substitutes</div>
+        <div class="text-xs text-slate-500 mt-1">適合匯入藥名、用途與大量 numbered sideEffect／use 欄位。</div>
+      </a>
+      <a class="rounded-xl border border-slate-200 p-4 hover:border-brand hover:bg-indigo-50" target="_blank" rel="noopener" href="https://www.kaggle.com/datasets/jithinanievarghese/drugs-side-effects-and-medical-condition">
+        <div class="font-bold text-brand">Drugs, Side Effects and Medical Condition</div>
+        <div class="text-xs text-slate-500 mt-1">適合衛教 QA 的適應症、品牌與副作用檢索。</div>
+      </a>
+      <a class="rounded-xl border border-slate-200 p-4 hover:border-brand hover:bg-indigo-50" target="_blank" rel="noopener" href="https://www.kaggle.com/datasets/mghobashy/drug-drug-interactions">
+        <div class="font-bold text-brand">Drug-Drug Interactions</div>
+        <div class="text-xs text-slate-500 mt-1">支援 Drug 1／Drug 2／Interaction 類型欄位，用於交互作用 RAG。</div>
+      </a>
+    </div>
+  </section>
+  <div class="grid lg:grid-cols-2 gap-5 mb-6">
+    <section class="card p-6"><h2 class="text-lg font-bold text-brand">1. 從 FDA 官方 API 同步</h2><p class="text-xs text-slate-500 mt-1 mb-4">輸入下方常用英文學名，或點選快速填入。每次同步一種藥，避免重覆查詢同一名稱。</p><div class="flex flex-wrap gap-2 mb-5 text-xs"><button type="button" data-fda-term="acetaminophen" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">acetaminophen</button><button type="button" data-fda-term="ibuprofen" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">ibuprofen</button><button type="button" data-fda-term="aspirin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">aspirin</button><button type="button" data-fda-term="metformin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">metformin</button><button type="button" data-fda-term="amlodipine" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">amlodipine</button><button type="button" data-fda-term="lisinopril" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">lisinopril</button><button type="button" data-fda-term="losartan" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">losartan</button><button type="button" data-fda-term="atorvastatin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">atorvastatin</button><button type="button" data-fda-term="simvastatin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">simvastatin</button><button type="button" data-fda-term="omeprazole" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">omeprazole</button><button type="button" data-fda-term="pantoprazole" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">pantoprazole</button><button type="button" data-fda-term="levothyroxine" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">levothyroxine</button><button type="button" data-fda-term="albuterol" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">albuterol</button><button type="button" data-fda-term="cetirizine" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">cetirizine</button><button type="button" data-fda-term="loratadine" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">loratadine</button><button type="button" data-fda-term="gabapentin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">gabapentin</button><button type="button" data-fda-term="sertraline" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">sertraline</button><button type="button" data-fda-term="fluoxetine" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">fluoxetine</button><button type="button" data-fda-term="hydrochlorothiazide" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">hydrochlorothiazide</button><button type="button" data-fda-term="warfarin" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">warfarin</button><button type="button" data-fda-term="clopidogrel" class="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100">clopidogrel</button></div><form method="post" class="space-y-4">{% csrf_token %}{% for field in sync_form %}<div><label class="block text-sm font-bold mb-1">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-xs text-red-600">{{ error }}</p>{% endfor %}</div>{% endfor %}<button name="sync_openfda" value="1" class="bg-brand text-white px-5 py-3 rounded-xl font-bold">連線 openFDA 並匯入</button></form></section>
+    <section class="card p-6"><h2 class="text-lg font-bold text-brand">2. 匯入 CSV 資料集</h2><p class="text-xs text-slate-500 mt-1 mb-5">可匯入推薦資料集或本機 CSV。系統會尋找 drug_name、side_effects、interactions、medical_condition 等常見欄位。</p><form method="post" enctype="multipart/form-data" class="space-y-4">{% csrf_token %}{% for field in kaggle_form %}<div><label class="block text-sm font-bold mb-1">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="text-xs text-slate-400 mt-1">{{ field.help_text }}</p>{% endif %}{% for error in field.errors %}<p class="text-xs text-red-600">{{ error }}</p>{% endfor %}</div>{% endfor %}<button name="import_kaggle" value="1" class="bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold">匯入 CSV</button></form></section>
+  </div>
+  <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm mb-6"><strong>資料使用方式：</strong>NDC 文件用於辨識產品、品牌、製造商、劑型與 NDC；Drug Label 文件用於 QA Agent 檢索用途、適應症、副作用、警告與交互作用。FDA 資料不應直接用來替代醫師或藥師判斷。</div>
+  <section class="card p-5 mb-6"><form method="get" class="flex flex-col sm:flex-row gap-3"><input name="q" value="{{ query }}" class="flex-1 px-4 py-2.5 rounded-lg border" placeholder="搜尋學名、品牌、Product NDC 或製造商"><button class="bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold">搜尋本機知識庫</button></form></section>
+  <div class="grid lg:grid-cols-[1fr_320px] gap-5">
+    <section class="card overflow-hidden"><div class="p-4 border-b font-bold text-brand">已匯入文件（最多顯示 100 筆）</div>{% if documents %}<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50"><tr><th class="text-left p-3">來源</th><th class="text-left p-3">藥物</th><th class="text-left p-3">NDC／製造商</th><th class="text-left p-3">可用 RAG 區段</th><th class="text-left p-3">同步時間</th></tr></thead><tbody>{% for d in documents %}<tr class="border-t align-top"><td class="p-3"><span class="px-2 py-1 bg-blue-50 text-blue-700 rounded">{{ d.get_source_type_display }}</span></td><td class="p-3"><a href="{% url 'dataset_document' d.id %}" class="font-bold text-brand hover:underline">{{ d.brand_name|default:d.generic_name }}</a><div class="text-slate-400">{{ d.generic_name }}</div></td><td class="p-3">{{ d.product_ndc|default:"-" }}<div class="text-slate-400">{{ d.manufacturer|truncatechars:45 }}</div></td><td class="p-3 text-slate-600">{% if d.indications or d.purpose %}功效 {% endif %}{% if d.adverse_reactions %}副作用 {% endif %}{% if d.warnings %}警告 {% endif %}{% if d.drug_interactions %}交互作用{% endif %}</td><td class="p-3">{{ d.retrieved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="py-14 text-center text-slate-400">尚未匯入資料。請先同步 openFDA 或上傳真實 Kaggle CSV。</div>{% endif %}</section>
+    <aside class="card p-5"><h2 class="font-bold text-brand mb-3">最近同步紀錄</h2><div class="space-y-3 text-xs">{% for run in sync_runs %}<div class="border-l-4 {% if run.state == 'success' %}border-green-500{% elif run.state == 'failed' %}border-red-500{% else %}border-yellow-500{% endif %} pl-3"><div class="font-bold">{{ run.get_source_display }}｜{{ run.query }}</div><div class="text-slate-500">{{ run.get_state_display }}｜新增 {{ run.records_added }}／更新 {{ run.records_updated }}</div><div class="text-slate-400">{{ run.message|truncatechars:90 }}</div></div>{% empty %}<p class="text-slate-400">尚無同步紀錄</p>{% endfor %}</div></aside>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-fda-term]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const input = document.querySelector('input[name="fda-query"]');
+    if (input) {
+      input.value = button.dataset.fdaTerm;
+      input.focus();
+    }
+  });
+});
+</script>
+{% endblock %}

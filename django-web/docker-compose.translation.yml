@@ -1,0 +1,31 @@
+# 選用：完全自架、無付費 API 的英翻中服務。
+# 啟動：docker compose -f docker-compose.yml -f docker-compose.translation.yml up --build -d
+services:
+  translator:
+    image: libretranslate/libretranslate:v1.9.6
+    restart: unless-stopped
+    environment:
+      LT_LOAD_ONLY: en,zh
+      LT_DISABLE_WEB_UI: "true"
+    ports:
+      - "${TRANSLATOR_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/languages', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+
+  web:
+    environment:
+      LIBRETRANSLATE_URL: http://translator:5000
+    depends_on:
+      translator:
+        condition: service_healthy
+
+  agent:
+    environment:
+      LIBRETRANSLATE_URL: http://translator:5000
+    depends_on:
+      translator:
+        condition: service_healthy

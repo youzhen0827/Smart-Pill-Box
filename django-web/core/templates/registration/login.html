@@ -1,0 +1,56 @@
+{% extends "core/base.html" %}
+{% block title %}登入 — 智慧藥盒平台{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[70vh] px-4 py-12">
+  <div class="w-full max-w-sm">
+
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3">💊</div>
+      <h1 class="text-2xl font-black text-brand">登入帳號</h1>
+      <p class="text-slate-500 text-sm mt-1">歡迎回到智慧藥盒平台</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+      <form method="post">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          帳號或密碼錯誤，請再試一次。
+        </div>
+        {% endif %}
+
+        <div class="mb-4">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">帳號</label>
+          <input type="text" name="username" autofocus autocomplete="username"
+                 class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition"
+                 placeholder="請輸入帳號">
+        </div>
+
+        <div class="mb-2">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">密碼</label>
+          <input type="password" name="password" autocomplete="current-password"
+                 class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition"
+                 placeholder="請輸入密碼">
+        </div>
+
+        <div class="text-right mb-6">
+          <a href="{% url 'password_reset' %}" class="text-sm font-semibold text-brand hover:underline">忘記密碼？</a>
+        </div>
+
+        <button type="submit"
+                class="w-full bg-brand text-white font-bold py-2.5 rounded-xl hover:bg-blue-900 transition text-sm shadow">
+          登入
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-sm text-slate-500 mt-5">
+      還沒有帳號？
+      <a href="{% url 'register' %}" class="text-brand font-semibold hover:underline">立即註冊</a>
+    </p>
+
+  </div>
+</div>
+{% endblock %}

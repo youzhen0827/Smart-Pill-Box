@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+{% block title %}語音衛教{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 py-7">
+  <div class="mb-6"><h1 class="text-2xl font-black text-brand">語音衛教</h1><p class="text-sm text-slate-500">獨立提供藥物知識問答與資料來源，不代表服藥任務的追蹤狀態。</p></div>
+  <div class="grid lg:grid-cols-[420px_1fr] gap-5">
+    <section class="card p-6"><form method="post" class="space-y-4">{% csrf_token %}{% for field in form %}<div><label class="block text-sm font-bold mb-1">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-xs text-red-600">{{ error }}</p>{% endfor %}</div>{% endfor %}<div><p class="text-xs font-bold text-slate-500 mb-2">常見問題</p><div class="grid grid-cols-2 gap-2"><button type="button" data-question="這顆藥是做什麼的？" class="tone-blue border px-3 py-2 rounded-lg text-xs font-bold">藥物用途</button><button type="button" data-question="這顆藥有哪些副作用？" class="tone-aqua border px-3 py-2 rounded-lg text-xs font-bold">可能副作用</button><button type="button" data-question="這顆藥要怎麼吃？劑量是多少？" class="tone-mint border px-3 py-2 rounded-lg text-xs font-bold">怎麼服用</button><button type="button" data-question="這顆藥可以和其他藥一起吃嗎？" class="tone-sage border px-3 py-2 rounded-lg text-xs font-bold">一起吃藥</button><button type="button" data-question="吃這顆藥有哪些事情要注意？" class="tone-plum border px-3 py-2 rounded-lg text-xs font-bold col-span-2">注意事項</button></div></div><div class="flex flex-wrap gap-2"><button class="bg-brand text-white px-5 py-3 rounded-xl font-bold">依問題查詢</button><button type="button" id="voiceInput" class="border border-brand text-brand px-4 py-3 rounded-xl font-bold">語音輸入問題</button></div></form><p class="text-xs text-slate-400 mt-4">回答只整理可追溯的 FDA 或 Kaggle 資料；沒有來源時會明確告知。</p></section>
+    <section class="card p-6 min-h-96"><div class="flex items-center justify-between gap-3 mb-4"><div><h2 class="font-bold text-brand">依問題整理的 Agent 回答</h2>{% if result %}<p class="text-xs text-slate-500 mt-1">回答類型：{{ result.question_label }}</p>{% endif %}</div>{% if result %}<button type="button" id="speakAnswer" class="px-3 py-2 rounded-lg bg-emerald-700 text-white text-sm font-bold">🔊 朗讀</button>{% endif %}</div>{% if result %}<div id="answerText" class="whitespace-pre-wrap text-base leading-8 bg-slate-50 border rounded-xl p-5">{{ result.answer }}</div>{% if result.evidence %}<h3 class="font-bold text-sm mt-5 mb-2">回答依據（本次採用 {{ result.evidence|length }} 筆本機資料）</h3><div class="space-y-2 text-xs">{% for item in result.evidence %}<div class="border rounded-lg p-3"><a href="{% url 'dataset_document' item.id %}" class="font-bold text-brand hover:underline">{{ item.source_label }}｜{{ item.brand_name|default:item.generic_name }}</a><div class="text-slate-500">Document #{{ item.id }}｜{{ item.section_label|default:item.section }}｜NDC {{ item.product_ndc|default:"-" }}</div></div>{% endfor %}</div>{% endif %}{% else %}<div class="text-center py-28 text-slate-400">輸入藥名與問題後開始檢索</div>{% endif %}</section>
+  </div>
+  <section class="card p-5 mt-5"><h2 class="font-bold text-brand mb-3">最近問答</h2><div class="grid md:grid-cols-2 gap-3 text-sm">{% for h in history %}<div class="border rounded-xl p-4"><div class="font-bold">{{ h.drug_query }}｜{{ h.question|truncatechars:45 }}</div><div class="text-xs text-slate-500 mt-2">{{ h.answer|truncatechars:150 }}</div><div class="text-xs text-slate-400 mt-2">{{ h.created_at|date:"Y-m-d H:i" }}</div></div>{% empty %}<p class="text-slate-400">尚無問答紀錄</p>{% endfor %}</div></section>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const question = document.getElementById('id_question');
+const voiceBtn = document.getElementById('voiceInput');
+document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => {
+  question.value = button.dataset.question;
+  question.focus();
+}));
+if (voiceBtn) voiceBtn.addEventListener('click', () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return alert('此瀏覽器不支援語音辨識，請改用文字或 Raspberry Pi 程式。');
+  const r = new SR(); r.lang = 'zh-TW'; r.onresult = e => { question.value = e.results[0][0].transcript; }; r.start();
+});
+const speakBtn = document.getElementById('speakAnswer');
+if (speakBtn) speakBtn.addEventListener('click', () => {
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(document.getElementById('answerText').innerText); u.lang='zh-TW'; u.rate=.9; speechSynthesis.speak(u);
+});
+</script>
+{% endblock %}

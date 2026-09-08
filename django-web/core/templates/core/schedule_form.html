@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="card p-6 sm:p-8">
+    <h1 class="text-2xl font-black text-brand mb-2">{{ title }}</h1>
+    <p class="text-sm text-slate-500 mb-6">固定排程會依選定星期建立每日任務；藥盒時段維持早／中／晚三格。</p>
+    <form method="post" class="grid sm:grid-cols-2 gap-5">
+      {% csrf_token %}
+      <div><div class="flex justify-between gap-2"><label class="block text-sm font-bold mb-1">{{ form.elder.label }}</label><a href="{% url 'elder_create' %}" class="text-xs text-brand underline">新增照護對象</a></div>{{ form.elder }}{% for error in form.elder.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div><label class="block text-sm font-bold mb-1">{{ form.scheduled_time.label }}</label>{{ form.scheduled_time }}{% for error in form.scheduled_time.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div class="sm:col-span-2"><label class="block text-sm font-bold mb-1">{{ form.drug_name.label }}</label>{{ form.drug_name }}<datalist id="drugOptions"></datalist><p class="text-xs text-slate-400 mt-1">{{ form.drug_name.help_text }}</p>{% for error in form.drug_name.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div><label class="block text-sm font-bold mb-1">{{ form.dose_count.label }}</label>{{ form.dose_count }}{% for error in form.dose_count.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div><label class="block text-sm font-bold mb-1">{{ form.slot.label }}</label>{{ form.slot }}{% for error in form.slot.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div class="sm:col-span-2"><label class="block text-sm font-bold mb-2">{{ form.weekdays.label }}</label><div class="grid grid-cols-2 sm:grid-cols-4 gap-2">{% for choice in form.weekdays %}<label class="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 text-sm">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}</div>{% for error in form.weekdays.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <div class="sm:col-span-2 flex items-center gap-2">{{ form.is_active }}<label class="text-sm font-bold">{{ form.is_active.label }}</label>{% for error in form.is_active.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+      <details class="sm:col-span-2 border border-slate-200 rounded-lg p-4">
+        <summary class="text-sm font-bold text-brand">進階設定</summary>
+        <div class="grid sm:grid-cols-2 gap-5 mt-4">
+          <div class="sm:col-span-2"><label class="block text-sm font-bold mb-1">{{ form.reminder_hint.label }}</label>{{ form.reminder_hint }}{% for error in form.reminder_hint.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+          <div><label class="block text-sm font-bold mb-1">再次提醒等待時間（分鐘）</label>{{ form.grace_minutes }}{% for error in form.grace_minutes.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+          <div><label class="block text-sm font-bold mb-1">漏服判定時間（分鐘）</label>{{ form.missed_after_minutes }}{% for error in form.missed_after_minutes.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+          <div class="sm:col-span-2"><label class="block text-sm font-bold mb-1">{{ form.device_id.label }}</label>{{ form.device_id }}{% for error in form.device_id.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
+        </div>
+      </details>
+      {% for error in form.non_field_errors %}<p class="sm:col-span-2 text-red-600 text-sm">{{ error }}</p>{% endfor %}
+      <div class="sm:col-span-2 flex gap-3 pt-2">
+        <button class="bg-brand text-white font-bold px-6 py-3 rounded-xl">儲存排程</button>
+        <a href="{% url 'schedules' %}" class="px-6 py-3 rounded-xl border">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const drugInput = document.querySelector('input[name="drug_name"]');
+const drugOptions = document.getElementById('drugOptions');
+let drugTimer = null;
+if (drugInput && drugOptions) {
+  drugInput.addEventListener('input', () => {
+    clearTimeout(drugTimer);
+    const q = drugInput.value.trim();
+    if (!q) {
+      drugOptions.innerHTML = '';
+      return;
+    }
+    drugTimer = setTimeout(async () => {
+      const res = await fetch("{% url 'drug_search_options' %}?q=" + encodeURIComponent(q));
+      const data = await res.json();
+      drugOptions.innerHTML = (data.results || []).map(item =>
+        `<option value="${item.value}">${item.label}</option>`
+      ).join('');
+    }, 180);
+  });
+}
+</script>
+{% endblock %}

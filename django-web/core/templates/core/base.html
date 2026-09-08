@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}智慧藥盒平台{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#776871', light: '#91A8A4', dark: '#5F535B' },
+            mint: '#F0F7EE',
+            periwinkle: '#C4D7F2',
+            aqua: '#AFDEDC',
+            sage: '#91A8A4',
+            plum: '#776871'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --mint: #F0F7EE;
+      --periwinkle: #C4D7F2;
+      --aqua: #AFDEDC;
+      --sage: #91A8A4;
+      --plum: #776871;
+      --plum-dark: #5F535B;
+      --ink: #302B31;
+    }
+    body {
+      font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+      color: var(--ink);
+      font-size: 17px;
+      line-height: 1.65;
+    }
+    main .text-sm { font-size: 1rem !important; line-height: 1.65 !important; }
+    main .text-base { font-size: 1.125rem !important; line-height: 1.7 !important; }
+    main .text-lg { font-size: 1.25rem !important; line-height: 1.55 !important; }
+    main .text-xl { font-size: 1.5rem !important; line-height: 1.45 !important; }
+    main .text-2xl { font-size: 1.75rem !important; line-height: 1.35 !important; }
+    main .text-3xl { font-size: 2.125rem !important; line-height: 1.25 !important; }
+    main label,
+    main input,
+    main select,
+    main textarea,
+    main button { font-size: 1rem !important; line-height: 1.55 !important; }
+    main input,
+    main select,
+    main button { min-height: 46px; }
+    main textarea { min-height: 112px; }
+    main table th,
+    main table td { line-height: 1.55; }
+    main table .text-xs { font-size: .9375rem !important; line-height: 1.55 !important; }
+    small,
+    main .text-xs { line-height: 1.5; }
+    .site-bg { background-color: var(--mint); background-image: none; }
+    .card {
+      background: #fff;
+      border: 1px solid var(--aqua);
+      border-left: 6px solid var(--periwinkle);
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(119, 104, 113, .1);
+    }
+    main .card:nth-child(5n+1), main .card:nth-of-type(5n+1) { border-left-color: var(--periwinkle); }
+    main .card:nth-child(5n+2), main .card:nth-of-type(5n+2) { border-left-color: var(--aqua); }
+    main .card:nth-child(5n+3), main .card:nth-of-type(5n+3) { border-left-color: var(--sage); }
+    main .card:nth-child(5n+4), main .card:nth-of-type(5n+4) { border-left-color: var(--plum); }
+    main .card:nth-child(5n+5), main .card:nth-of-type(5n+5) { border-left-color: var(--mint); }
+    nav.bg-brand {
+      background-color: var(--plum) !important;
+      border-bottom: 5px solid var(--aqua);
+      box-shadow: 0 6px 18px rgba(119, 104, 113, .18);
+    }
+    .nav-link { border-bottom: 3px solid transparent; border-radius: 6px; }
+    .nav-link:hover { background-color: rgba(240, 247, 238, .14); color: #fff; }
+    .nav-link.is-active { color: var(--plum-dark) !important; }
+    .nav-home.is-active { background: var(--mint); border-color: var(--mint); }
+    .nav-monitor.is-active { background: var(--periwinkle); border-color: var(--periwinkle); }
+    .nav-schedule.is-active { background: var(--aqua); border-color: var(--aqua); }
+    .nav-agent.is-active { background: var(--sage); border-color: var(--sage); }
+    .nav-voice.is-active { background: var(--periwinkle); border-color: var(--periwinkle); }
+    .nav-data.is-active { background: var(--aqua); border-color: var(--aqua); }
+    .nav-android.is-active { background: var(--mint); border-color: var(--mint); }
+    footer.bg-brand {
+      background-color: var(--plum) !important;
+      border-top: 6px solid var(--sage);
+    }
+    .text-brand { color: var(--plum) !important; }
+    .bg-brand { background-color: var(--plum) !important; }
+    .border-brand { border-color: var(--sage) !important; }
+    .focus\:ring-brand:focus { --tw-ring-color: rgba(175, 222, 220, .85) !important; }
+    .focus\:border-brand:focus { border-color: var(--sage) !important; }
+    .bg-blue-50 { background-color: var(--periwinkle) !important; }
+    .border-blue-200 { border-color: var(--aqua) !important; }
+    .text-blue-700, .text-blue-800 { color: var(--plum-dark) !important; }
+    .bg-emerald-700, .bg-emerald-600 { background-color: var(--sage) !important; }
+    .bg-slate-800 { background-color: var(--plum) !important; }
+    .bg-slate-50 { background-color: var(--periwinkle) !important; }
+    .bg-amber-50 { background-color: var(--mint) !important; }
+    .border-amber-200 { border-color: var(--sage) !important; }
+    .text-amber-900 { color: var(--plum-dark) !important; }
+    .bg-green-50 { background-color: var(--aqua) !important; }
+    .border-green-200 { border-color: var(--sage) !important; }
+    .text-green-800 { color: var(--plum-dark) !important; }
+    .bg-red-50 { background-color: var(--mint) !important; }
+    .border-red-200 { border-color: var(--plum) !important; }
+    .text-red-700, .text-red-800, .text-red-600 { color: var(--plum-dark) !important; }
+    table thead { background-color: var(--periwinkle) !important; }
+    tbody tr:nth-child(5n+1) { background-color: rgba(240, 247, 238, .72); }
+    tbody tr:nth-child(5n+2) { background-color: rgba(196, 215, 242, .34); }
+    tbody tr:nth-child(5n+3) { background-color: rgba(175, 222, 220, .32); }
+    tbody tr:nth-child(5n+4) { background-color: rgba(145, 168, 164, .2); }
+    tbody tr:nth-child(5n+5) { background-color: rgba(119, 104, 113, .08); }
+    input, select, textarea {
+      accent-color: var(--sage);
+      border-color: var(--aqua) !important;
+      background-color: rgba(255, 255, 255, .96);
+    }
+    button.bg-brand, a.bg-brand { background-color: var(--plum) !important; }
+    button.bg-brand:hover, a.bg-brand:hover, .hover\:bg-blue-900:hover { background-color: var(--plum-dark) !important; }
+    .tone-mint { background: var(--mint); border-color: var(--sage); }
+    .tone-blue { background: var(--periwinkle); border-color: var(--periwinkle); }
+    .tone-aqua { background: var(--aqua); border-color: var(--aqua); }
+    .tone-sage { background: var(--sage); border-color: var(--sage); }
+    .tone-plum { background: var(--plum); border-color: var(--plum); color: #fff; }
+    .rounded-xl, .rounded-2xl { border-radius: 8px !important; }
+    details > summary { cursor: pointer; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="site-bg min-h-screen flex flex-col text-slate-800">
+<nav class="bg-brand shadow-lg sticky top-0 z-40">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6">
+    <div class="flex items-center justify-between min-h-16 gap-4">
+      <a href="{% url 'home' %}" class="flex items-center gap-2 text-white font-black whitespace-nowrap">
+        <span class="text-2xl">💊</span><span>智慧藥盒平台</span><span class="text-[10px] bg-emerald-500/20 text-emerald-100 px-2 py-1 rounded-full">早中晚三格版</span>
+      </a>
+      <div class="hidden lg:flex items-center gap-1 text-sm">
+        <a href="{% url 'home' %}" class="nav-link nav-home px-3 py-2 {% if request.resolver_match.url_name == 'home' %}is-active{% else %}text-white/70{% endif %}">首頁</a>
+        {% if user.is_authenticated %}
+          <a href="{% url 'dashboard' %}" class="nav-link nav-monitor px-3 py-2 {% if request.resolver_match.url_name == 'dashboard' %}is-active{% else %}text-white/70{% endif %}">監控中心</a>
+          <a href="{% url 'schedules' %}" class="nav-link nav-schedule px-3 py-2 {% if 'schedule' in request.resolver_match.url_name %}is-active{% else %}text-white/70{% endif %}">服藥排程</a>
+          <a href="{% url 'agent_center' %}" class="nav-link nav-agent px-3 py-2 {% if request.resolver_match.url_name == 'agent_center' %}is-active{% else %}text-white/70{% endif %}">AI Agent 追蹤</a>
+          <a href="{% url 'qa_center' %}" class="nav-link nav-voice px-3 py-2 {% if request.resolver_match.url_name == 'qa_center' %}is-active{% else %}text-white/70{% endif %}">語音衛教</a>
+          <a href="{% url 'dataset_center' %}" class="nav-link nav-data px-3 py-2 {% if request.resolver_match.url_name == 'dataset_center' %}is-active{% else %}text-white/70{% endif %}">資料集匯入</a>
+          <a href="{% url 'android_name_settings' %}" class="nav-link nav-android px-3 py-2 {% if request.resolver_match.url_name == 'android_name_settings' %}is-active{% else %}text-white/70{% endif %}">Android 名字</a>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-2">
+        {% if user.is_authenticated %}
+          {% if user.is_staff %}<a href="/admin/" target="_blank" class="hidden sm:inline-flex px-3 py-2 rounded-lg text-xs font-semibold bg-white/15 text-white hover:bg-white/25">後台</a>{% endif %}
+          <span class="hidden sm:inline text-white/70 text-xs">{{ user.username }}</span>
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="px-3 py-2 rounded-lg text-xs font-semibold border border-white/40 text-white hover:bg-white/15">登出</button></form>
+        {% else %}
+          <a href="{% url 'login' %}" class="px-3 py-2 rounded-lg text-xs font-semibold border border-white/40 text-white">登入</a>
+          <a href="{% url 'register' %}" class="px-3 py-2 rounded-lg text-xs font-bold bg-white text-brand">註冊</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if user.is_authenticated %}
+    <div class="lg:hidden flex gap-2 overflow-x-auto pb-3 text-xs whitespace-nowrap">
+      <a href="{% url 'home' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">首頁</a>
+      <a href="{% url 'dashboard' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">監控</a>
+      <a href="{% url 'schedules' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">排程</a>
+      <a href="{% url 'agent_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">Agent 追蹤</a>
+      <a href="{% url 'qa_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">衛教</a>
+      <a href="{% url 'dataset_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">資料集</a>
+      <a href="{% url 'android_name_settings' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">Android 名字</a>
+    </div>
+    {% endif %}
+  </div>
+</nav>
+
+{% if messages %}
+<div class="max-w-7xl w-full mx-auto px-4 sm:px-6 mt-4 space-y-2">
+  {% for msg in messages %}
+  <div class="px-4 py-3 rounded-xl text-sm font-medium border {% if msg.tags == 'error' %}bg-red-50 text-red-800 border-red-200{% elif msg.tags == 'success' %}bg-green-50 text-green-800 border-green-200{% else %}bg-blue-50 text-blue-800 border-blue-200{% endif %}">{{ msg }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<main class="flex-1">{% block content %}{% endblock %}</main>
+<footer class="bg-brand text-white/60 text-xs text-center py-5 mt-10">© 2026 智慧藥盒平台｜高齡友善智慧藥盒與作息關懷 Agent</footer>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

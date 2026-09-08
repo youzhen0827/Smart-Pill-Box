@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="palette_mint">#F0F7EE</color>
+    <color name="palette_blue">#C4D7F2</color>
+    <color name="palette_aqua">#AFDEDC</color>
+    <color name="palette_sage">#91A8A4</color>
+    <color name="palette_plum">#776871</color>
+    <color name="topbar_blue">#776871</color>
+    <color name="topbar_blue_dark">#5F535B</color>
+    <color name="page_bg">#F0F7EE</color>
+    <color name="tab_bg">#C4D7F2</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="card_border">#AFDEDC</color>
+    <color name="input_bg">#FFFFFF</color>
+    <color name="text_primary">#302B31</color>
+    <color name="text_secondary">#776871</color>
+    <color name="border_gray">#91A8A4</color>
+    <color name="ok_green">#5F7773</color>
+    <color name="ok_green_bg">#AFDEDC</color>
+    <color name="warn_orange">#5D7090</color>
+    <color name="warn_orange_bg">#C4D7F2</color>
+    <color name="danger_red">#776871</color>
+    <color name="danger_red_bg">#F0F7EE</color>
+    <color name="info_blue_bg">#C4D7F2</color>
+    <color name="smart_teal">#91A8A4</color>
+    <color name="header_subtitle">#F0F7EE</color>
+    <color name="header_muted">#AFDEDC</color>
+    <color name="button_secondary_bg">#F0F7EE</color>
+    <color name="button_secondary_pressed">#C4D7F2</color>
+    <color name="slot_unknown_bg">#F0F7EE</color>
+    <color name="slot_unknown_border">#91A8A4</color>
+</resources>

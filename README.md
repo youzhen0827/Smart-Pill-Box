@@ -4,6 +4,18 @@
 
 結合邊緣運算與雲端平台的智慧藥盒系統，以 Raspberry Pi + ESP32 為硬體核心，整合 LLM AI Agent、語音互動與 RAG 藥物知識庫，協助長者安全、準時用藥。
 
+## 專案原始碼
+
+|資料夾|內容|
+|---|---|
+|[`django-web/`](django-web/)|Django 網頁、REST API、服藥排程、AI Agent、語音衛教與資料集匯入|
+|[`android-app/`](android-app/)|可獨立查詢藥物衛教並與 Django 同步排程的 Android APP|
+|[`docs/`](docs/)|系統架構與需求分析圖片|
+
+詳細安裝與執行方式請閱讀 [`django-web/README.md`](django-web/README.md) 與 [`android-app/README.md`](android-app/README.md)。
+
+> 本儲存庫不包含本機 SQLite 資料庫、帳號資料、密碼或 API 金鑰。藥物資料可依網頁專案說明，從 openFDA 即時同步或匯入合法取得的 Kaggle CSV。
+
 -----
 
 ## 系統架構概覽

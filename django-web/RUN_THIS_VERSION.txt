@@ -1,0 +1,20 @@
+請執行這個資料夾：6_workflow_smart_medicine_box_Django_re
+
+這是「流程化介面 v6」，並保留早／中／晚三格資料。
+監控中心右側標題必須看到：
+  早／中／晚三格藥盒感測狀態  三格版 v4
+導覽列左上角會看到：
+  早中晚三格版
+
+Windows 建議：
+1. conda activate venv_312
+2. python manage.py migrate
+3. python manage.py runserver
+4. 瀏覽器重新整理 Ctrl+F5
+
+Android 模擬器 API：
+  http://10.0.2.2:8000/api/v1/
+Token：
+  smartpill-dev-token
+
+健康檢查 /api/v1/health/ 必須回傳 slot_count=3，slots=早/中/晚，ui_revision=6。

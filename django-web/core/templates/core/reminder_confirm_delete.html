@@ -1,0 +1,24 @@
+{% extends "core/base.html" %}
+{% block title %}刪除服藥任務 — 智慧藥盒平台{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto px-4 sm:px-6 py-10">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+    <h1 class="text-xl font-black text-red-600 mb-3">確認刪除</h1>
+    <p class="text-sm text-slate-600 leading-relaxed">
+      你確定要刪除「<strong>{{ reminder.medicine_name }}</strong>」這筆服藥任務嗎？
+      這個動作無法復原。
+    </p>
+
+    <form method="post" class="flex gap-3 mt-6">
+      {% csrf_token %}
+      <button type="submit" class="bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-red-700 transition text-sm">
+        確認刪除
+      </button>
+      <a href="{% url 'dashboard' %}" class="px-5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+        取消
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}
+{% block title %}監控中心{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-5"><div><h1 class="text-2xl font-black text-brand">監控中心</h1><p class="text-sm text-slate-500">{{ today }}｜整合今日任務、追蹤進度與需要處理的項目</p></div><div class="flex items-center gap-3"><a href="{% url 'reminder_create' %}" class="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold">新增臨時服藥</a><a href="{% url 'schedules' %}" class="text-brand underline text-sm font-semibold">管理固定排程</a></div></div>
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-brand">{{ stats.total }}</div><div class="text-xs text-slate-400">今日總數</div></div>
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-600">{{ stats.pending }}</div><div class="text-xs text-slate-400">尚未到時間</div></div>
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-cyan-700">{{ stats.tracking }}</div><div class="text-xs text-slate-400">追蹤中</div></div>
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-green-600">{{ stats.completed }}</div><div class="text-xs text-slate-400">已完成</div></div>
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-red-500">{{ stats.attention }}</div><div class="text-xs text-slate-400">需要處理</div></div>
+    <div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-600">{{ schedule_count }}</div><div class="text-xs text-slate-400">啟用排程</div></div>
+  </div>
+  <div class="grid lg:grid-cols-[1fr_360px] gap-5">
+    <section class="card p-5 overflow-hidden"><div class="flex items-center justify-between border-b pb-3 mb-3"><div><h2 class="font-bold text-brand">今日服藥任務</h2><p class="text-xs text-slate-400 mt-1">由固定排程自動產生，也可由照護者新增臨時服藥。</p></div><a href="{% url 'agent_center' %}" class="text-xs text-brand underline">查看追蹤進度</a></div>
+      {% if reminders %}<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-xs text-slate-400"><th class="p-2">照護對象</th><th class="p-2">藥物／來源</th><th class="p-2">預定時間</th><th class="p-2">服藥結果</th><th class="p-2">追蹤進度／依據</th><th class="p-2">操作</th></tr></thead><tbody>{% for r in reminders %}<tr class="border-t"><td class="p-2 font-semibold">{{ r.user_name }}</td><td class="p-2"><div class="font-semibold text-brand">{{ r.medicine_name }}</div><div class="text-xs text-slate-400">{{ r.dose_count }} 粒｜{% if r.source == 'schedule' %}固定排程{% elif r.source == 'web' %}臨時新增{% elif r.source == 'android' %}Android 同步{% else %}{{ r.get_source_display }}{% endif %}</div></td><td class="p-2 text-slate-600">{% if r.scheduled_datetime %}{{ r.scheduled_datetime|date:"H:i" }}{% else %}{{ r.scheduled_time }}{% endif %}<div class="text-xs">{{ r.get_slot_display|default:"未指定" }}</div></td><td class="p-2"><span class="px-2 py-1 rounded-full text-xs font-bold {% if r.status == '已服藥' %}bg-green-100 text-green-700{% elif r.status == '漏服' %}bg-red-100 text-red-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">{% if r.status == '已服藥' and r.confirmation_source == 'sensor' %}推定已取藥{% elif r.status == '已服藥' %}已確認服藥{% elif r.status == '漏服' %}疑似漏服{% elif r.agent_state == 'pending' %}待執行{% else %}待確認{% endif %}</span></td><td class="p-2 text-xs"><div class="font-semibold">{{ r.get_agent_state_display }}</div><div class="text-slate-400">{% if r.confirmation_source %}{{ r.get_confirmation_source_display }}{% else %}尚無確認依據{% endif %}｜提醒 {{ r.reminder_count }} 次</div></td><td class="p-2 whitespace-nowrap">
+              {% if r.status == '已提醒' %}<form method="post" action="{% url 'reminder_taken' r.id %}" class="inline">{% csrf_token %}<button class="text-green-700 underline text-xs">確認服藥</button></form>{% endif %}
+              <a href="{% url 'reminder_edit' r.id %}" class="text-brand underline text-xs ml-2">編輯</a>
+              <a href="{% url 'reminder_delete' r.id %}" class="text-red-600 underline text-xs ml-2">刪除</a>
+            </td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="text-center py-12 text-slate-400">今日尚無任務。建立週期排程後，Agent 會自動產生。</div>{% endif %}
+    </section>
+    <aside class="space-y-5">
+      <section class="card p-5">
+        <h2 class="font-bold text-brand mb-2">AI Agent 追蹤與語音衛教</h2>
+        <p class="text-xs text-slate-500 leading-5 mb-3">追蹤頁說明系統進度；語音衛教頁提供藥物知識問答。</p>
+        <div class="flex flex-wrap gap-2">
+          <a href="{% url 'agent_center' %}" class="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold">Agent 追蹤</a>
+          <a href="{% url 'qa_center' %}" class="bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold">語音衛教</a>
+        </div>
+      </section>
+      <section class="card p-5">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <h2 class="font-bold text-brand">早／中／晚三格藥盒感測狀態 <span class="text-[10px] font-normal text-emerald-600">三格版 {{ three_slot_revision }}</span></h2>
+          <span class="text-[11px] text-slate-400">{{ selected_device_id|default:"尚未綁定裝置" }}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2" data-slot-count="{{ slot_count }}">
+          {% for item in slot_states %}
+          <div class="rounded-xl border-2 p-3 text-center {% if item.state == 'opened' %}border-orange-300 bg-orange-50{% elif item.state == 'closed' %}border-green-300 bg-green-50{% else %}border-slate-200 bg-slate-50{% endif %}">
+            <div class="text-xs font-bold">{{ item.slot_label }}</div>
+            <div class="text-xl mt-1">{% if item.state == 'opened' %}📤{% elif item.state == 'closed' %}📥{% else %}❔{% endif %}</div>
+            <div class="text-[10px] mt-1 {% if item.state == 'opened' %}text-orange-700{% elif item.state == 'closed' %}text-green-700{% else %}text-slate-400{% endif %}">
+              {% if item.state == 'opened' %}最近開啟{% elif item.state == 'closed' %}最近關閉{% else %}無事件{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <p class="text-xs text-slate-400 mt-3">這裡只顯示 Raspberry Pi／裝置實際上報的最新事件；無資料時顯示「無事件」，不推測藥格是否有藥。</p>
+      </section>
+      <section class="card p-5"><h2 class="font-bold text-brand mb-3">最近感測器事件</h2><div class="space-y-2 text-xs">{% for e in recent_events %}<div class="border-l-4 border-cyan-500 pl-3"><div class="font-semibold">{{ e.device_id }}｜{{ e.get_slot_display|default:"未指定" }}｜{{ e.get_event_type_display }}</div><div class="text-slate-400">{{ e.detected_at|date:"m-d H:i:s" }}｜任務 {{ e.matched_reminder_id|default:"未配對" }}</div></div>{% empty %}<p class="text-slate-400">尚無事件</p>{% endfor %}</div></section>
+      <section class="card p-5"><h2 class="font-bold text-brand mb-3">最近 Agent 介入</h2><div class="space-y-2 text-xs">{% for i in interventions %}<div class="border-l-4 border-orange-400 pl-3"><div class="font-semibold">{{ i.get_intervention_type_display }}</div><div class="text-slate-500 line-clamp-2">{{ i.message }}</div></div>{% empty %}<p class="text-slate-400">尚無介入紀錄</p>{% endfor %}</div></section>
+    </aside>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+PASS - Django SLOT_COUNT: 3
+PASS - Django SLOT_CHOICES exact: [(1, '早'), (2, '中'), (3, '晚')]
+PASS - Django slot payload exact: [{'slot': 1, 'label': '早', 'period': 'morning'}, {'slot': 2, 'label': '中', 'period': 'noon'}, {'slot': 3, 'label': '晚', 'period': 'evening'}]
+PASS - Django/Raspberry Python syntax: 36 files
+PASS - Dashboard title is three-slot
+PASS - Dashboard grid is 3 columns
+PASS - Dashboard exposes slot_count marker
+PASS - Dashboard slot states come from slot_payload
+PASS - Dashboard sensor query limited to 1..3
+PASS - Schedule DB constraint 1..3
+PASS - Reminder DB constraint 1..3/null
+PASS - SensorEvent DB constraint 1..3/null
+PASS - Web forms use shared three-slot choices
+PASS - Schedule period removed from editable form
+PASS - API rejects out-of-range slots
+PASS - API health declares 3-slot layout
+PASS - Sensor API returns slot label
+PASS - No runtime UI text 七格藥盒感測狀態
+PASS - No runtime UI text 格 4
+PASS - No runtime UI text 格 5
+PASS - No runtime UI text 格 6
+PASS - No runtime UI text 格 7
+PASS - No runtime UI text 第 4 格
+PASS - No runtime UI text 第 5 格
+PASS - No runtime UI text 第 6 格
+PASS - No runtime UI text 第 7 格
+PASS - Agent intervention uses 早中晚 label
+PASS - Raspberry Pi exactly 3 default pins
+PASS - Android has exactly tvSlot1/2/3: ['tvSlot1', 'tvSlot2', 'tvSlot3']
+PASS - Android slot card labels exact: {'tvSlot1': '早\\n未排程', 'tvSlot2': '中\\n未排程', 'tvSlot3': '晚\\n未排程'}
+PASS - Android XML syntax: 21 files
+PASS - Android SLOT_COUNT=3
+PASS - Android option labels exact
+PASS - Android sensor spinner uses shared labels
+PASS - Android schedule sends period aligned to slot
+PASS - Android validates Django 3-slot health contract
+PASS - Android old saved slot is coerced to 1..3
+PASS - Android no >3 slot UI pattern tvSlot[4-7]
+PASS - Android no >3 slot UI pattern 格 ?[4-7]
+PASS - Android no >3 slot UI pattern 第 ?[4-7] ?格
+PASS - Android project name is v2.1_Android_4
+PASS - Android Studio machine cache removed
+PASS - Migration 0013 exists
+PASS - Migration maps periods to slots
+
+TOTAL PASS: 44

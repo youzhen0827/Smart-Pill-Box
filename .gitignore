@@ -1,0 +1,28 @@
+# Secrets and local databases
+**/.env
+*.sqlite3
+
+# Python
+**/__pycache__/
+*.py[cod]
+**/.venv/
+**/venv*/
+**/staticfiles/
+**/media/
+**/.pytest_cache/
+**/.mypy_cache/
+
+# Android and IDE output
+**/.gradle/
+**/.kotlin/
+**/.idea/
+**/.vscode/
+**/local.properties
+**/build/
+*.iml
+*.apk
+*.aab
+
+# Operating system files
+.DS_Store
+Thumbs.db

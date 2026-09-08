@@ -1,0 +1,16 @@
+{% extends "core/base.html" %}
+{% block title %}服藥排程{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-7">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div><h1 class="text-2xl font-black text-brand">服藥排程</h1><p class="text-sm text-slate-500">設定會重複執行的長期規則；每日任務與結果請到監控中心查看。</p></div>
+    <a href="{% url 'schedule_create' %}" class="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold">新增固定排程</a>
+  </div>
+  {% if not elders %}<div class="mb-5 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">尚未建立照護對象。請先<a href="{% url 'elder_create' %}" class="font-bold underline">新增照護對象</a>，才能建立固定服藥排程。</div>{% endif %}
+  {% if not drug_count %}<div class="mb-5 p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-sm">目前沒有藥物資料。新增排程時可直接輸入藥名，系統會建立本地藥物對照。</div>{% endif %}
+  <div class="card overflow-hidden">
+    {% if schedules %}<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-slate-500"><tr><th class="p-3 text-left">照護對象</th><th class="p-3 text-left">藥物</th><th class="p-3 text-left">時間</th><th class="p-3 text-left">藥盒時段</th><th class="p-3 text-left">執行星期</th><th class="p-3 text-left">Agent 門檻</th><th class="p-3 text-left">裝置</th><th class="p-3 text-left">排程狀態</th><th class="p-3"></th></tr></thead><tbody>{% for s in schedules %}<tr class="border-t"><td class="p-3 font-semibold">{{ s.elder.name }}</td><td class="p-3"><div class="font-semibold text-brand">{{ s.drug.name_zh }}</div><div class="text-xs text-slate-400">{{ s.drug.generic_name }}</div></td><td class="p-3">{{ s.scheduled_time|time:"H:i" }}<div class="text-xs text-slate-400">{{ s.dose_count }} 粒</div></td><td class="p-3">{{ s.get_slot_display }}</td><td class="p-3 text-xs">{{ s.weekdays }}</td><td class="p-3 text-xs">再次提醒 {{ s.grace_minutes }} 分<br>漏服判定 {{ s.missed_after_minutes }} 分</td><td class="p-3 text-xs">{{ s.device_id }}</td><td class="p-3"><span class="px-2 py-1 rounded-full text-xs font-bold {% if s.is_active %}bg-green-100 text-green-700{% else %}bg-slate-100 text-slate-500{% endif %}">{% if s.is_active %}啟用{% else %}停用{% endif %}</span></td><td class="p-3 whitespace-nowrap"><a href="{% url 'schedule_edit' s.id %}" class="text-brand underline text-xs">編輯</a><form method="post" action="{% url 'schedule_delete' s.id %}" class="inline ml-2" onsubmit="return confirm('確定刪除此排程？')">{% csrf_token %}<button class="text-red-600 underline text-xs">刪除</button></form></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="text-center py-14 text-slate-400">尚無固定服藥排程</div>{% endif %}
+  </div>
+  <div class="mt-5 card p-5 text-sm text-slate-600"><h2 class="font-bold text-brand mb-2">排程與今日任務</h2><p>排程是長期規則；系統會依星期與時間建立當日的一次性服藥任務。</p></div>
+</div>
+{% endblock %}
