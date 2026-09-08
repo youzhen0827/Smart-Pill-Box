@@ -12,6 +12,8 @@ internal enum class EducationQuestionKind {
     GENERAL
 }
 
+internal data class EducationAnswerReview(val passed: Boolean, val message: String)
+
 internal object MedicationEducationLogic {
     private val englishWord = Regex("\\b[A-Za-z]{3,}\\b")
 
@@ -236,5 +238,25 @@ internal object MedicationEducationLogic {
         if (focused.length > maxChars) focused = focused.take(maxChars).trimEnd()
         if (focused.length < cleaned.length && !focused.endsWith("…")) focused += "…"
         return focused
+    }
+
+    fun reviewAnswer(
+        kind: EducationQuestionKind,
+        sectionField: String,
+        sourceText: String,
+        translatedText: String
+    ): EducationAnswerReview {
+        val concise = conciseAnswer(translatedText)
+        val remainingEnglish = englishWord.containsMatchIn(
+            concise.replace(Regex("\\b(?:FDA|USP|NDC|API)\\b"), "")
+        )
+        val checksPassed = sectionField in fieldCandidates(kind) &&
+            sourceText.isNotBlank() && concise.isNotBlank() &&
+            concise.length <= 321 && !remainingEnglish
+        return if (checksPassed) {
+            EducationAnswerReview(true, "問題類型、FDA 資料區段、回答長度與中文內容均已核對。")
+        } else {
+            EducationAnswerReview(false, "回答與問題或資料來源不完全相符，Agent 已停止顯示。")
+        }
     }
 }

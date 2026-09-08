@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .slots import slot_label
 from .models import (
+    AgentDecision,
     AgentIntervention,
     DatasetSyncRun,
     Drug,
@@ -86,6 +87,13 @@ class AgentInterventionAdmin(admin.ModelAdmin):
     list_display = ("intervention_type", "reminder", "state", "channel", "created_at")
     list_filter = ("intervention_type", "state", "channel")
     search_fields = ("message", "reminder__user_name", "reminder__medicine_name")
+
+
+@admin.register(AgentDecision)
+class AgentDecisionAdmin(admin.ModelAdmin):
+    list_display = ("reminder", "stage", "planner", "risk_level", "updated_at")
+    list_filter = ("stage", "planner", "risk_level")
+    search_fields = ("reminder__user_name", "reminder__medicine_name", "reasoning")
 
 
 @admin.register(DrugKnowledgeDocument)

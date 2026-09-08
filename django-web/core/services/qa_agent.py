@@ -42,6 +42,8 @@ class QAResult:
     translated: bool = False
     auto_synced: bool = False
     sync_message: str = ""
+    quality_status: str = "passed"
+    quality_message: str = "Agent 已核對問題、資料來源與回答內容。"
 
 
 PLAIN_PREFIX = {
@@ -477,6 +479,49 @@ def _can_auto_sync(query: str) -> bool:
     return bool(re.search(r"[A-Za-z]", resolved) or re.fullmatch(r"[0-9\-]+", resolved))
 
 
+def _review_answer(
+    *,
+    question_types: list[str],
+    used_sections: set[str],
+    content_text: str,
+    evidence_count: int,
+    language: str,
+) -> tuple[str, str]:
+    """用可重現規則檢查回答是否相關、有依據、精簡且適合中文閱讀。"""
+    if evidence_count == 0:
+        return "insufficient_evidence", "資料不足，Agent 已停止推測並改為請使用者詢問醫師或藥師。"
+
+    expected = set()
+    for question_type in question_types:
+        if question_type in {"missed_dose", "dosage"}:
+            expected.add("dosage")
+        elif question_type == "indications":
+            expected.update({"purpose", "indications"})
+        elif question_type != "general":
+            expected.add(question_type)
+    relevant = not expected or bool(expected & used_sections)
+    concise = len(content_text) <= max(420, 360 * max(1, len(used_sections)))
+    review_text = re.sub(r"\b(?:FDA|USP|NDC|API)\b", "", content_text)
+    if language.lower().startswith("zh"):
+        readable = (
+            TRANSLATION_UNAVAILABLE_TEXT not in content_text
+            and bool(CHINESE_TEXT.search(review_text))
+            and not _has_english_words(review_text)
+        )
+    else:
+        readable = bool(review_text.strip())
+    if relevant and concise and readable:
+        return "passed", "問題類型、回答區段、資料來源、長度與中文內容均已核對。"
+    failed = []
+    if not relevant:
+        failed.append("回答沒有對到問題類型")
+    if not concise:
+        failed.append("回答過長")
+    if not readable:
+        failed.append("中文內容仍不完整")
+    return "blocked", "、".join(failed) + "；Agent 已停止顯示可能不合理的內容。"
+
+
 def answer_medication_question(
     drug_query: str,
     question: str,
@@ -528,6 +573,8 @@ def answer_medication_question(
             question_label=answer_label,
             auto_synced=auto_synced,
             sync_message=sync_message,
+            quality_status="insufficient_evidence",
+            quality_message="資料不足，Agent 已停止推測並改為請使用者詢問醫師或藥師。",
         )
 
     blocks: list[str] = []
@@ -535,6 +582,7 @@ def answer_medication_question(
     translated_any = False
     translation_failed = False
     seen_sections: set[str] = set()
+    answer_contents: list[str] = []
 
     for item in evidences:
         if item.section_name in seen_sections:
@@ -558,6 +606,7 @@ def answer_medication_question(
 
         prefix = PLAIN_PREFIX.get(item.section_name, f"{section_label(item.section_name)}：")
         blocks.append(f"【{section_label(item.section_name)}】\n{prefix}{display_text}")
+        answer_contents.append(display_text)
 
         doc = item.document
         evidence_payload.append(
@@ -587,6 +636,19 @@ def answer_medication_question(
         + "\n\n".join(blocks)
         + f"\n\n【請注意】\n{guidance_text}"
     )
+    quality_status, quality_message = _review_answer(
+        question_types=question_types,
+        used_sections=seen_sections,
+        content_text=" ".join(answer_contents),
+        evidence_count=len(evidence_payload),
+        language=language,
+    )
+    if quality_status == "blocked":
+        answer = (
+            f"藥物：{drug_query}\n\n"
+            "Agent 檢查後發現本次回答可能不夠精準，因此沒有直接顯示。\n"
+            "請換一個更明確的問題，或帶著藥袋詢問醫師、藥師。"
+        )
     return QAResult(
         answer=answer,
         evidence=evidence_payload,
@@ -595,4 +657,6 @@ def answer_medication_question(
         translated=translated_any,
         auto_synced=auto_synced,
         sync_message=sync_message,
+        quality_status=quality_status,
+        quality_message=quality_message,
     )

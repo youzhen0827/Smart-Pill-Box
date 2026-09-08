@@ -30,6 +30,7 @@ from .forms import (
     UserProfileForm,
 )
 from .models import (
+    AgentDecision,
     AgentIntervention,
     DatasetSyncRun,
     Drug,
@@ -42,6 +43,7 @@ from .models import (
     SensorEvent,
     UserProfile,
 )
+from .services.agent_planner import TOOL_LABELS
 from .services.dataset_service import DatasetServiceError, import_kaggle_csv, sync_openfda
 from .services.medication_agent import mark_reminder_taken, match_sensor_event, run_agent_cycle
 from .slots import SLOT_COUNT, is_valid_slot, period_for_slot, slot_label, slot_payload
@@ -488,6 +490,14 @@ def agent_center(request):
     interventions = AgentIntervention.objects.filter(
         Q(reminder__owner=request.user) | Q(reminder__user_name__in=profile_names)
     ).select_related("reminder")[:30]
+    decisions = list(
+        AgentDecision.objects.filter(reminder__in=reminder_query)
+        .select_related("reminder")[:30]
+    )
+    for decision in decisions:
+        decision.tool_labels = "、".join(
+            TOOL_LABELS.get(item, item) for item in decision.planned_tools
+        )
     events = SensorEvent.objects.filter(
         Q(device_record__owner=request.user) | Q(user_name__in=profile_names),
         slot__range=(1, SLOT_COUNT),
@@ -499,6 +509,7 @@ def agent_center(request):
             "schedules": schedules_qs,
             "reminders": reminders,
             "interventions": interventions,
+            "decisions": decisions,
             "events": events,
             "sensor_form": SensorDemoForm(),
             "agent_stats": agent_stats,
@@ -687,6 +698,7 @@ def _get_or_create_elder(user_name, user_age=""):
 
 
 def _serialize_reminder(reminder):
+    decision = reminder.agent_decisions.first()
     return {
         "id": reminder.id,
         "user_name": reminder.user_name,
@@ -705,6 +717,26 @@ def _serialize_reminder(reminder):
         "taken_at": reminder.taken_at.isoformat() if reminder.taken_at else None,
         "confirmation_source": reminder.confirmation_source,
         "source": reminder.source,
+        "agent_decision": (
+            {
+                "stage": decision.stage,
+                "stage_label": decision.get_stage_display(),
+                "planner": decision.planner,
+                "planner_label": decision.get_planner_display(),
+                "risk_score": decision.risk_score,
+                "risk_level": decision.risk_level,
+                "risk_label": decision.get_risk_level_display(),
+                "planned_tools": decision.planned_tools,
+                "planned_tool_labels": [
+                    TOOL_LABELS.get(item, item) for item in decision.planned_tools
+                ],
+                "reasoning": decision.reasoning,
+                "execution_result": decision.execution_result,
+                "updated_at": decision.updated_at.isoformat(),
+            }
+            if decision
+            else None
+        ),
     }
 
 
@@ -1011,6 +1043,8 @@ def api_qa_ask(request):
                 "translated": result.translated,
                 "auto_synced": result.auto_synced,
                 "sync_message": result.sync_message,
+                "quality_status": result.quality_status,
+                "quality_message": result.quality_message,
             }
         )
     except ValueError as exc:

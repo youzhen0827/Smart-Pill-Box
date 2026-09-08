@@ -200,17 +200,17 @@ RAG 依藥名 + 問題類型檢索相關區段
 - 漏服判定分鐘
 - 裝置 ID
 
-狀態機：
+Agent 循環：
 
 ```text
-pending
-  └─ 到服藥時間 → 建立 initial_reminder
-                    ↓
-              waiting_sensor
-                    ├─ 收到相同裝置／格位 opened → taken
-                    └─ 超過 grace_minutes → sensor_missing → intervened
-                                                  └─ 超過 missed_after_minutes → missed
+觀察時間、感測器、裝置連線與近 30 日紀錄
+  → 計算風險
+  → 本機安全規劃器或選用的 AI 模型選擇白名單工具
+  → 執行提醒、等待感測、檢查裝置或通知照護者
+  → 保存 AgentDecision 的理由與執行結果
 ```
+
+可在 `.env` 設定 `AGENT_LLM_BASE_URL` 與 `AGENT_LLM_MODEL` 使用 OpenAI 相容模型；留空時仍由本機安全規劃器依情境自主選擇工具。模型不能修改藥品、劑量或排程。
 
 Docker 的 `agent` 服務持續執行；本機開發也可手動執行一次：
 

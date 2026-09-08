@@ -9,12 +9,15 @@ from django.utils import timezone
 
 from core.slots import SLOT_COUNT, slot_label
 from core.models import (
+    AgentDecision,
     AgentIntervention,
     MedicationLog,
     MedicationSchedule,
+    PillBoxDevice,
     Reminder,
     SensorEvent,
 )
+from core.services.agent_planner import TOOL_LABELS, plan_agent_action
 
 
 @dataclass
@@ -25,6 +28,8 @@ class AgentCycleResult:
     matched_sensor_events: int = 0
     interventions_created: int = 0
     missed_marked: int = 0
+    decisions_created: int = 0
+    tools_executed: int = 0
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -158,6 +163,176 @@ def _mark_taken_from_event(reminder: Reminder, event: SensorEvent) -> None:
     )
 
 
+def _device_health(reminder: Reminder, now) -> tuple[str, str]:
+    if not reminder.device_id:
+        return "not_configured", "未指定裝置"
+    device = PillBoxDevice.objects.filter(device_id=reminder.device_id).first()
+    last_seen = device.last_seen_at if device else None
+    if last_seen is None:
+        last_seen = (
+            SensorEvent.objects.filter(device_id=reminder.device_id)
+            .order_by("-detected_at")
+            .values_list("detected_at", flat=True)
+            .first()
+        )
+    if last_seen is None:
+        return "unknown", "尚無裝置回報"
+    age_minutes = max(0, int((now - last_seen).total_seconds() // 60))
+    if age_minutes > 15:
+        return "offline", f"已 {age_minutes} 分鐘沒有回報"
+    return "online", f"{age_minutes} 分鐘前有回報"
+
+
+def _observe(reminder: Reminder, now, stage: str) -> dict:
+    minutes_late = max(0, int((now - reminder.scheduled_datetime).total_seconds() // 60))
+    schedule = reminder.schedule
+    history = MedicationLog.objects.none()
+    if schedule:
+        history = MedicationLog.objects.filter(
+            schedule__elder=schedule.elder,
+            scheduled_dt__gte=now - timedelta(days=30),
+        ).exclude(reminder=reminder)
+    prior_missed = history.filter(status="missed").count()
+    prior_taken = history.filter(status="taken").count()
+    device_health, device_note = _device_health(reminder, now)
+    risk_score = min(35, minutes_late // 2) + min(40, prior_missed * 15)
+    risk_score += min(15, reminder.reminder_count * 5)
+    if device_health == "offline":
+        risk_score += 10
+    risk_score = min(100, risk_score)
+    risk_level = "high" if risk_score >= 60 else "medium" if risk_score >= 30 else "low"
+    return {
+        "stage": stage,
+        "minutes_late": minutes_late,
+        "grace_minutes": schedule.grace_minutes if schedule else 10,
+        "missed_after_minutes": schedule.missed_after_minutes if schedule else 60,
+        "reminder_count": reminder.reminder_count,
+        "prior_taken_30d": prior_taken,
+        "prior_missed_30d": prior_missed,
+        "device_health": device_health,
+        "device_note": device_note,
+        "sensor_confirmed": stage == "sensor_confirmed",
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+    }
+
+
+def _tool_options(stage: str) -> tuple[list[str], list[str]]:
+    if stage == "before_due":
+        return ["wait_until_due"], []
+    if stage == "sensor_confirmed":
+        return ["confirm_sensor_event"], []
+    if stage == "due_window":
+        return ["send_initial_reminder", "wait_for_sensor"], []
+    if stage == "follow_up_window":
+        return ["send_initial_reminder"], [
+            "send_followup_reminder",
+            "request_device_check",
+            "escalate_caregiver",
+        ]
+    return ["send_initial_reminder", "mark_probable_missed"], []
+
+
+def _execute_agent_tool(
+    tool: str,
+    reminder: Reminder,
+    observation: dict,
+    result: AgentCycleResult,
+    *,
+    sensor_event: SensorEvent | None = None,
+) -> dict:
+    result.tools_executed += 1
+    if tool in {"wait_until_due", "wait_for_sensor"}:
+        return {"state": "waiting", "message": TOOL_LABELS[tool]}
+    if tool == "confirm_sensor_event" and sensor_event:
+        _mark_taken_from_event(reminder, sensor_event)
+        result.matched_sensor_events += 1
+        return {"state": "completed", "event_id": sensor_event.id}
+    if tool == "send_initial_reminder":
+        _, created = _create_intervention(
+            reminder,
+            "initial_reminder",
+            f"{reminder.user_name}，現在是 {reminder.scheduled_time}，請服用 {reminder.medicine_name} {reminder.dose_count} 粒。",
+        )
+        if created:
+            reminder.reminder_count += 1
+            result.interventions_created += 1
+        return {"state": "created" if created else "already_exists"}
+    if tool == "send_followup_reminder":
+        _, created = _create_intervention(
+            reminder,
+            "sensor_missing",
+            f"服藥時間已到 {observation['grace_minutes']} 分鐘，仍未偵測到{slot_label(reminder.slot)}藥格開啟，Agent 已再次提醒。",
+        )
+        if created:
+            reminder.reminder_count += 1
+            result.interventions_created += 1
+        return {"state": "created" if created else "already_exists"}
+    if tool == "request_device_check":
+        _, created = _create_intervention(
+            reminder,
+            "device_check",
+            f"{reminder.device_id or '藥盒'}近期沒有回報，請照護者確認藥盒連線與實際服藥情況。",
+        )
+        if created:
+            result.interventions_created += 1
+        return {"state": "created" if created else "already_exists"}
+    if tool == "escalate_caregiver":
+        _, created = _create_intervention(
+            reminder,
+            "caregiver_escalation",
+            f"近期有漏服紀錄，本次也尚未偵測到開盒；請照護者提早確認 {reminder.user_name} 的服藥情況。",
+        )
+        if created:
+            result.interventions_created += 1
+        return {"state": "created" if created else "already_exists"}
+    if tool == "mark_probable_missed":
+        newly_missed = reminder.status != "漏服"
+        reminder.status = "漏服"
+        reminder.agent_state = "missed"
+        if newly_missed:
+            result.missed_marked += 1
+        _, created = _create_intervention(
+            reminder,
+            "missed_escalation",
+            f"{reminder.user_name} 的 {reminder.medicine_name} 已超過 {observation['missed_after_minutes']} 分鐘仍未偵測到開盒，標記為疑似漏服，請照護者確認。",
+        )
+        if created:
+            result.interventions_created += 1
+        if reminder.schedule_id:
+            MedicationLog.objects.update_or_create(
+                reminder=reminder,
+                defaults={
+                    "schedule": reminder.schedule,
+                    "status": "missed",
+                    "scheduled_dt": reminder.scheduled_datetime,
+                    "taken_at": None,
+                    "reminder_count": reminder.reminder_count,
+                },
+            )
+        return {"state": "marked", "notification_created": created}
+    return {"state": "rejected", "message": "工具不在允許清單"}
+
+
+def _remember_decision(reminder, stage, observation, available_tools, plan, outcomes):
+    decision, created = AgentDecision.objects.update_or_create(
+        reminder=reminder,
+        stage=stage,
+        defaults={
+            "planner": plan.planner,
+            "model_name": plan.model_name,
+            "risk_score": observation["risk_score"],
+            "risk_level": observation["risk_level"],
+            "observation": observation,
+            "available_tools": available_tools,
+            "planned_tools": plan.tools,
+            "reasoning": plan.reasoning,
+            "execution_result": outcomes,
+        },
+    )
+    return decision, created
+
+
 @transaction.atomic
 def match_sensor_event(event: SensorEvent) -> Reminder | None:
     """把真實藥盒開啟事件配對至最接近的未完成服藥任務。"""
@@ -192,7 +367,7 @@ def match_sensor_event(event: SensorEvent) -> Reminder | None:
 
 @transaction.atomic
 def run_agent_cycle(now=None) -> AgentCycleResult:
-    """執行一次狀態追蹤 Agent 狀態機。"""
+    """執行一次「觀察 → 評估 → 規劃 → 使用工具 → 記憶」Agent 循環。"""
     now = now or timezone.now()
     result = AgentCycleResult()
     result.schedules_checked = MedicationSchedule.objects.filter(
@@ -214,71 +389,50 @@ def run_agent_cycle(now=None) -> AgentCycleResult:
         result.reminders_checked += 1
         sensor_event = _sensor_match_for_reminder(reminder, now)
         if sensor_event:
-            _mark_taken_from_event(reminder, sensor_event)
-            result.matched_sensor_events += 1
-            continue
+            stage = "sensor_confirmed"
+        else:
+            due = reminder.scheduled_datetime
+            schedule = reminder.schedule
+            grace_minutes = schedule.grace_minutes if schedule else 10
+            missed_after_minutes = schedule.missed_after_minutes if schedule else 60
+            if now < due:
+                stage = "before_due"
+            elif now < due + timedelta(minutes=grace_minutes):
+                stage = "due_window"
+            elif now < due + timedelta(minutes=missed_after_minutes):
+                stage = "follow_up_window"
+            else:
+                stage = "overdue"
 
-        due = reminder.scheduled_datetime
-        if now < due:
-            if reminder.agent_state != "pending":
-                reminder.agent_state = "pending"
-                reminder.save(update_fields=["agent_state", "updated_at"])
-            continue
-
-        schedule = reminder.schedule
-        grace_minutes = schedule.grace_minutes if schedule else 10
-        missed_after_minutes = schedule.missed_after_minutes if schedule else 60
-        grace_at = due + timedelta(minutes=grace_minutes)
-        missed_at = due + timedelta(minutes=missed_after_minutes)
-
-        _, created = _create_intervention(
-            reminder,
-            "initial_reminder",
-            f"{reminder.user_name}，現在是 {reminder.scheduled_time}，請服用 {reminder.medicine_name} {reminder.dose_count} 粒。",
+        observation = _observe(reminder, now, stage)
+        required_tools, optional_tools = _tool_options(stage)
+        available_tools = required_tools + optional_tools
+        plan = plan_agent_action(
+            observation=observation,
+            required_tools=required_tools,
+            optional_tools=optional_tools,
         )
-        if created:
-            reminder.reminder_count += 1
-            result.interventions_created += 1
+        outcomes = {
+            tool: _execute_agent_tool(
+                tool, reminder, observation, result, sensor_event=sensor_event
+            )
+            for tool in plan.tools
+        }
 
-        if now < grace_at:
+        if stage == "before_due":
+            reminder.agent_state = "pending"
+        elif stage == "due_window":
             reminder.agent_state = "waiting_sensor"
-            reminder.save(update_fields=["agent_state", "reminder_count", "updated_at"])
-            continue
-
-        if now < missed_at:
-            _, created = _create_intervention(
-                reminder,
-                "sensor_missing",
-                f"服藥時間已到 {grace_minutes} 分鐘，感測器仍未偵測到{slot_label(reminder.slot)}藥格開啟，Agent 已再次提醒。",
-            )
-            if created:
-                reminder.reminder_count += 1
-                result.interventions_created += 1
+        elif stage == "follow_up_window":
             reminder.agent_state = "intervened"
-            reminder.save(update_fields=["agent_state", "reminder_count", "updated_at"])
-            continue
-
-        reminder.status = "漏服"
-        reminder.agent_state = "missed"
-        reminder.save(update_fields=["status", "agent_state", "reminder_count", "updated_at"])
-        result.missed_marked += 1
-        _, created = _create_intervention(
-            reminder,
-            "missed_escalation",
-            f"{reminder.user_name} 的 {reminder.medicine_name} 已超過 {missed_after_minutes} 分鐘仍未偵測到開盒，系統判定為漏服，請照護者確認。",
+        if stage != "sensor_confirmed":
+            reminder.save(
+                update_fields=["status", "agent_state", "reminder_count", "updated_at"]
+            )
+        _, created = _remember_decision(
+            reminder, stage, observation, available_tools, plan, outcomes
         )
         if created:
-            result.interventions_created += 1
-        if reminder.schedule_id:
-            MedicationLog.objects.update_or_create(
-                reminder=reminder,
-                defaults={
-                    "schedule": reminder.schedule,
-                    "status": "missed",
-                    "scheduled_dt": reminder.scheduled_datetime,
-                    "taken_at": None,
-                    "reminder_count": reminder.reminder_count,
-                },
-            )
+            result.decisions_created += 1
 
     return result

@@ -324,6 +324,8 @@ class AgentIntervention(models.Model):
     TYPES = [
         ("initial_reminder", "到時提醒"),
         ("sensor_missing", "感測器未偵測"),
+        ("device_check", "請確認藥盒連線"),
+        ("caregiver_escalation", "提早通知照護者"),
         ("missed_escalation", "漏服升級通知"),
         ("qa_education", "醫療衛教"),
     ]
@@ -361,6 +363,51 @@ class AgentIntervention(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_intervention_type_display()} — {self.state}"
+
+
+class AgentDecision(models.Model):
+    """Agent 每次觀察、規劃、使用工具及結果的可稽核記憶。"""
+
+    STAGES = [
+        ("before_due", "尚未到時"),
+        ("due_window", "到時等待"),
+        ("follow_up_window", "逾時追蹤"),
+        ("overdue", "疑似漏服"),
+        ("sensor_confirmed", "感測確認"),
+    ]
+    PLANNERS = [
+        ("safe_policy", "本機安全規劃器"),
+        ("llm", "AI 模型規劃器"),
+        ("llm_fallback", "AI 模型失敗後安全規劃器"),
+    ]
+    RISK_LEVELS = [("low", "低"), ("medium", "中"), ("high", "高")]
+
+    reminder = models.ForeignKey(
+        Reminder, on_delete=models.CASCADE, related_name="agent_decisions"
+    )
+    stage = models.CharField("決策階段", max_length=30, choices=STAGES)
+    planner = models.CharField("規劃方式", max_length=30, choices=PLANNERS)
+    model_name = models.CharField("模型名稱", max_length=120, blank=True, default="")
+    risk_score = models.PositiveSmallIntegerField("風險分數", default=0)
+    risk_level = models.CharField("風險等級", max_length=10, choices=RISK_LEVELS)
+    observation = models.JSONField("觀察資料", default=dict)
+    available_tools = models.JSONField("可用工具", default=list)
+    planned_tools = models.JSONField("選用工具", default=list)
+    reasoning = models.TextField("決策理由")
+    execution_result = models.JSONField("執行結果", default=dict)
+    created_at = models.DateTimeField("首次決策時間", auto_now_add=True)
+    updated_at = models.DateTimeField("最後決策時間", auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reminder", "stage"], name="uniq_agent_decision_per_stage"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.reminder} — {self.get_stage_display()}"
 
 
 class DrugKnowledgeDocument(models.Model):

@@ -36,7 +36,9 @@ internal data class MedicationEducationAnswer(
     val evidence: String,
     val questionLabel: String,
     val usedDownloadedModel: Boolean,
-    val fromCache: Boolean
+    val fromCache: Boolean,
+    val qualityPassed: Boolean,
+    val qualityMessage: String
 )
 
 internal class StandaloneMedicationAgent(context: Context) : Closeable {
@@ -146,13 +148,21 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
         val questionLabel = MedicationEducationLogic.label(draft.kind)
         val sectionLabel = MedicationEducationLogic.sectionLabel(draft.sectionField)
         val conciseText = MedicationEducationLogic.conciseAnswer(translatedText)
-        val answer = buildString {
-            append("藥物：${draft.displayDrug}\n\n")
-            append("【$sectionLabel】\n")
-            append(MedicationEducationLogic.prefix(draft.kind))
-            append(conciseText)
-            append("\n\n【請注意】\n")
-            append(MedicationEducationLogic.nextStep(draft.kind))
+        val review = MedicationEducationLogic.reviewAnswer(
+            draft.kind, draft.sectionField, draft.sourceText, conciseText
+        )
+        val answer = if (review.passed) {
+            buildString {
+                append("藥物：${draft.displayDrug}\n\n")
+                append("【$sectionLabel】\n")
+                append(MedicationEducationLogic.prefix(draft.kind))
+                append(conciseText)
+                append("\n\n【請注意】\n")
+                append(MedicationEducationLogic.nextStep(draft.kind))
+            }
+        } else {
+            "藥物：${draft.displayDrug}\n\nAgent 檢查後發現本次回答可能不夠精準，因此沒有直接顯示。" +
+                "\n請換一個更明確的問題，或帶著藥袋詢問醫師、藥師。"
         }
         val evidence = buildString {
             append("資料證據（APP 直接取得）：\n")
@@ -166,7 +176,9 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
             evidence = evidence,
             questionLabel = questionLabel,
             usedDownloadedModel = usedDownloadedModel,
-            fromCache = draft.fromCache
+            fromCache = draft.fromCache,
+            qualityPassed = review.passed,
+            qualityMessage = review.message
         )
     }
 

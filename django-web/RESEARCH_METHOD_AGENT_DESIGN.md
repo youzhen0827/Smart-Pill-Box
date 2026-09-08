@@ -25,21 +25,22 @@
 - `SensorEvent`：opened、closed、heartbeat
 - 系統時間
 
-### 狀態
+### 觀察與規劃
 
-| 狀態 | 定義 |
+| 項目 | 定義 |
 |---|---|
-| pending | 尚未到預定時間 |
-| waiting_sensor | 已到時，等待指定裝置與格位的 opened |
-| intervened | 超過等待門檻，已建立未開盒介入 |
-| taken | opened 已配對，或經 Android／網頁確認 |
-| missed | 超過漏服門檻仍無 opened |
+| Observation | 時間、感測事件、裝置連線、提醒次數與近 30 日服藥紀錄 |
+| Risk | 依逾時、過往漏服與裝置狀態計算低／中／高風險 |
+| Planner | 本機安全規劃器，或選用 OpenAI 相容模型 |
+| Tools | 提醒本人、等待感測、檢查裝置、通知照護者、標記疑似漏服 |
+| Memory | 保存每個階段的判斷理由、選用工具與執行結果 |
 
 ### 可追溯輸出
 
 - `Reminder`：一次性任務與最終狀態
 - `MedicationLog`：排程層級結果
 - `AgentIntervention`：到時提醒、未開盒、漏服升級
+- `AgentDecision`：觀察、風險、規劃器、可用工具、選擇理由與執行結果
 - `SensorEvent.matched_reminder`：感測事件與任務配對關係
 
 ## QA 醫療衛教 Agent
@@ -57,7 +58,8 @@
 3. 在本機 `DrugKnowledgeDocument` 以藥名、NDC、詞彙重疊與來源類型評分。
 4. 選出有限數量證據段落。
 5. 只截短與編排證據；選用自架 LibreTranslate 翻譯，不用生成式模型補寫事實。
-6. 回傳 evidence ID、source_id、source_url 與檢索區段。
+6. Agent 檢查問題類型、資料區段、來源、長度與中文完整性；不合格回答會被攔截。
+7. 回傳 evidence ID、source_id、source_url 與檢索區段。
 
 ### 無資料策略
 

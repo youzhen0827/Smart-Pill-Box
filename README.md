@@ -107,7 +107,7 @@
 - [ ] ESP32 韌體開發
 - [ ] Raspberry Pi 語音模組
 - [ ] Django 後端 API
-- [ ] LLM Agent 整合
+- [x] 可選用 LLM 的安全 Agent 規劃器與回答合理性檢查
 - [ ] RAG 知識庫建置
 - [ ] 前端用戶介面
 - [ ] 系統整合測試

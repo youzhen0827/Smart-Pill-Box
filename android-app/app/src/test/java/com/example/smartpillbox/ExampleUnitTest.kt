@@ -71,5 +71,24 @@ class ExampleUnitTest {
         assertTrue(answer.contains("第二句重點"))
         assertFalse(answer.contains("第三句不應顯示"))
     }
+
+    @Test
+    fun agentChecksThatAnswerMatchesQuestionAndIsChinese() {
+        val passed = MedicationEducationLogic.reviewAnswer(
+            EducationQuestionKind.INDICATIONS,
+            "indications_and_usage",
+            "Treatment of Type 2 diabetes mellitus",
+            "用於治療第 2 型糖尿病"
+        )
+        assertTrue(passed.passed)
+
+        val blocked = MedicationEducationLogic.reviewAnswer(
+            EducationQuestionKind.INTERACTIONS,
+            "adverse_reactions",
+            "Nausea",
+            "Nausea"
+        )
+        assertFalse(blocked.passed)
+    }
 }
 

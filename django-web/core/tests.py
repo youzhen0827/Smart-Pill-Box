@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.models import (
+    AgentDecision,
     AgentIntervention,
     DatasetSyncRun,
     Drug,
@@ -178,6 +179,14 @@ class MedicationAgentTests(TestCase):
             set(reminder.interventions.values_list("intervention_type", flat=True)),
             {"initial_reminder", "sensor_missing"},
         )
+        decision = AgentDecision.objects.get(reminder=reminder, stage="follow_up_window")
+        self.assertEqual(decision.planner, "safe_policy")
+        self.assertEqual(
+            decision.planned_tools,
+            ["send_initial_reminder", "send_followup_reminder"],
+        )
+        self.assertIn("minutes_late", decision.observation)
+        self.assertIn("send_followup_reminder", decision.execution_result)
 
         # 狀態機重跑不能重複建立同類介入。
         second = run_agent_cycle(now + timedelta(seconds=30))
@@ -221,6 +230,33 @@ class MedicationAgentTests(TestCase):
         self.assertEqual(reminder.status, "已服藥")
         self.assertEqual(reminder.confirmation_source, "sensor")
         self.assertEqual(result.matched_sensor_events, 1)
+        self.assertTrue(
+            AgentDecision.objects.filter(
+                reminder=reminder, stage="sensor_confirmed"
+            ).exists()
+        )
+
+    def test_agent_uses_history_to_escalate_high_risk_case(self):
+        now = timezone.make_aware(datetime(2026, 7, 10, 10, 40))
+        schedule = self.make_schedule(scheduled_time=time(10, 0), missed=60)
+        for days_ago in range(1, 5):
+            MedicationLog.objects.create(
+                schedule=schedule,
+                status="missed",
+                scheduled_dt=now - timedelta(days=days_ago),
+            )
+
+        run_agent_cycle(now)
+
+        reminder = Reminder.objects.get(schedule=schedule)
+        decision = AgentDecision.objects.get(reminder=reminder, stage="follow_up_window")
+        self.assertEqual(decision.risk_level, "high")
+        self.assertIn("escalate_caregiver", decision.planned_tools)
+        self.assertTrue(
+            reminder.interventions.filter(
+                intervention_type="caregiver_escalation"
+            ).exists()
+        )
 
 
 class DatasetImportTests(TestCase):

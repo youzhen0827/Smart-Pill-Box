@@ -53,6 +53,16 @@ class ReminderAdapter(
             append("\n確認依據：${confirmationLabel(item.confirmationSource)}")
             append(" · 來源：${sourceLabel(item.source)}")
             append(" · 提醒 ${item.reminderCount} 次")
+            item.agentDecision?.let { decision ->
+                append("\nAgent 風險：${decision.riskLabel}（${decision.riskScore}）")
+                append(" · ${decision.plannerLabel}")
+                if (decision.toolLabels.isNotEmpty()) {
+                    append("\n選擇動作：${decision.toolLabels.joinToString("、")}")
+                }
+                if (decision.reasoning.isNotBlank()) {
+                    append("\n判斷理由：${decision.reasoning}")
+                }
+            }
         }
 
         when (item.status) {

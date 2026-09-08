@@ -2,6 +2,15 @@ package com.example.smartpillbox
 
 import org.json.JSONObject
 
+data class AgentDecisionItem(
+    val stageLabel: String,
+    val plannerLabel: String,
+    val riskScore: Int,
+    val riskLabel: String,
+    val toolLabels: List<String>,
+    val reasoning: String
+)
+
 data class ReminderItem(
     val id: Int,
     val userName: String,
@@ -19,7 +28,8 @@ data class ReminderItem(
     val reminderCount: Int,
     val takenAt: String?,
     val confirmationSource: String,
-    val source: String
+    val source: String,
+    val agentDecision: AgentDecisionItem?
 ) {
     companion object {
         fun fromJson(obj: JSONObject): ReminderItem = ReminderItem(
@@ -39,7 +49,25 @@ data class ReminderItem(
             reminderCount = obj.optInt("reminder_count"),
             takenAt = obj.optString("taken_at").takeIf { it.isNotBlank() && it != "null" },
             confirmationSource = obj.optString("confirmation_source"),
-            source = obj.optString("source")
+            source = obj.optString("source"),
+            agentDecision = obj.optJSONObject("agent_decision")?.let { decision ->
+                val labels = decision.optJSONArray("planned_tool_labels")
+                AgentDecisionItem(
+                    stageLabel = decision.optString("stage_label"),
+                    plannerLabel = decision.optString("planner_label"),
+                    riskScore = decision.optInt("risk_score"),
+                    riskLabel = decision.optString("risk_label"),
+                    toolLabels = buildList {
+                        if (labels != null) {
+                            for (index in 0 until labels.length()) {
+                                val label = labels.optString(index)
+                                if (label.isNotBlank()) add(label)
+                            }
+                        }
+                    },
+                    reasoning = decision.optString("reasoning")
+                )
+            }
         )
     }
 }

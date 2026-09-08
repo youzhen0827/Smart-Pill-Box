@@ -893,6 +893,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             btnSpeakAnswer.isEnabled = latestAnswer.isNotBlank()
                             tvQaStatus.text = buildString {
                                 append("回答完成；問題類型：${result.questionLabel}")
+                                append(if (result.qualityPassed) "；Agent 合理性檢查：通過" else "；Agent 合理性檢查：已攔截")
                                 append("；由 APP 直接查詢 FDA")
                                 if (result.usedDownloadedModel) append("；已在手機內翻成中文")
                                 if (result.fromCache) append("；使用先前儲存的資料")
