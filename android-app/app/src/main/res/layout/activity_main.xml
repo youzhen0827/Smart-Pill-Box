@@ -23,7 +23,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="💊 智慧藥盒管家・第 6 版"
+                android:text="💊 智慧藥盒管家"
                 android:textColor="#FFFFFF"
                 android:textSize="26sp"
                 android:textStyle="bold" />

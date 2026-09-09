@@ -9,6 +9,7 @@ from functools import lru_cache
 
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 try:
     from opencc import OpenCC
@@ -621,7 +622,7 @@ def answer_medication_question(
                 "section": item.section_name,
                 "section_label": section_label(item.section_name),
                 "source_url": doc.source_url,
-                "retrieved_at": doc.retrieved_at.isoformat(),
+                "retrieved_at": timezone.localtime(doc.retrieved_at).isoformat(),
             }
         )
 

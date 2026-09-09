@@ -35,6 +35,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -66,12 +67,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         private const val REQUEST_SPEECH = 1201
         private const val REQUEST_RECORD_AUDIO = 1202
+        private val TAIPEI_TIME_ZONE: TimeZone = TimeZone.getTimeZone("Asia/Taipei")
     }
 
     private lateinit var prefs: SharedPreferences
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val selectedDate: Calendar = Calendar.getInstance()
+    private val selectedDate: Calendar = Calendar.getInstance(TAIPEI_TIME_ZONE)
+
+    private fun taipeiDateFormat(pattern: String, locale: Locale = Locale.TAIWAN) =
+        SimpleDateFormat(pattern, locale).apply { timeZone = TAIPEI_TIME_ZONE }
 
     private lateinit var tabHost: TabHost
     private lateinit var tvHeaderTime: TextView
@@ -410,12 +415,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val savedDate = prefs.getString(KEY_ADD_DATE, "") ?: ""
         if (savedDate.isNotBlank()) {
             try {
-                selectedDate.time = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(savedDate) ?: Date()
+                selectedDate.time = taipeiDateFormat("yyyy-MM-dd", Locale.US).parse(savedDate) ?: Date()
             } catch (_: Exception) {
                 selectedDate.time = Date()
             }
         }
-        val now = Calendar.getInstance()
+        val now = Calendar.getInstance(TAIPEI_TIME_ZONE)
         val addTime = prefs.getString(KEY_ADD_TIME, "") ?: ""
         val scheduleTime = prefs.getString(KEY_SCHEDULE_TIME, "") ?: ""
         setTimeFromText(addTime, isSchedule = false, defaultHour = now.get(Calendar.HOUR_OF_DAY), defaultMinute = now.get(Calendar.MINUTE))
@@ -516,7 +521,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val date = taipeiDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         tvTodayStatus.text = "正在讀取 Django 今日服藥任務…"
         executeApi(
             task = { apiClient().reminders(userName, date) },
@@ -559,7 +564,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             agentAdapter.submitList(emptyList())
             return
         }
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val date = taipeiDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         tvAgentStatus.text = "正在讀取今天的 Agent 追蹤進度…"
         executeApi(
             task = { apiClient().reminders(userName, date) },
@@ -629,11 +634,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val hour = selectedAddHour
         val minute = selectedAddMinute
         val scheduledDateTime = String.format(Locale.US, "%sT%02d:%02d:00", date, hour, minute)
-        val twelveHour = Calendar.getInstance().apply {
+        val twelveHour = Calendar.getInstance(TAIPEI_TIME_ZONE).apply {
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
         }
-        val scheduledTime = SimpleDateFormat("hh:mm a", Locale.US).format(twelveHour.time)
+        val scheduledTime = taipeiDateFormat("hh:mm a", Locale.US).format(twelveHour.time)
 
         val payload = JSONObject()
             .put("user_name", userName)
@@ -951,9 +956,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun showDateChoices() {
-        val today = Calendar.getInstance()
-        val tomorrow = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 1) }
-        val afterTomorrow = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 2) }
+        val today = Calendar.getInstance(TAIPEI_TIME_ZONE)
+        val tomorrow = Calendar.getInstance(TAIPEI_TIME_ZONE).apply { add(Calendar.DAY_OF_MONTH, 1) }
+        val afterTomorrow = Calendar.getInstance(TAIPEI_TIME_ZONE).apply { add(Calendar.DAY_OF_MONTH, 2) }
         val labels = arrayOf(
             "今天 ${formatDate(today)}",
             "明天 ${formatDate(tomorrow)}",
@@ -1124,7 +1129,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun formatDate(calendar: Calendar): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
+        taipeiDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
 
     private fun requestSpeechInput(target: SpeechTarget) {
         pendingSpeechTarget = target
@@ -1258,7 +1263,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             .put("user_name", userName)
             .put("slot", spinnerSensorSlot.selectedItemPosition + 1)
             .put("event_type", "opened")
-            .put("detected_at", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date()))
+            .put("detected_at", taipeiDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date()))
             .put("source", "android_manual_test")
 
         tvSensorStatus.text = "正在送出感測器事件…"
@@ -1278,14 +1283,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun updateHeaderClock() {
-        tvHeaderTime.text = SimpleDateFormat(
+        tvHeaderTime.text = taipeiDateFormat(
             "yyyy年M月d日 EEEE HH:mm:ss",
             Locale.TAIWAN
         ).format(Date())
     }
 
     private fun updateDateField() {
-        editAddDate.setText(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(selectedDate.time))
+        editAddDate.setText(taipeiDateFormat("yyyy-MM-dd", Locale.US).format(selectedDate.time))
     }
 
     private fun <T> executeApi(

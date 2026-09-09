@@ -584,6 +584,7 @@ class StrictThreeSlotLayoutTests(ApiTestMixin, TestCase):
         self.assertEqual([item["slot"] for item in body["slots"]], [1, 2, 3])
         self.assertEqual(body["pillbox_layout"], "early-noon-evening-3-slot")
         self.assertEqual(body["ui_revision"], 6)
+        self.assertTrue(body["time"].endswith("+08:00"))
 
     def test_dashboard_renders_only_three_slot_cards(self):
         self.client.force_login(self.user)

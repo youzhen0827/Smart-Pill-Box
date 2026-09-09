@@ -697,6 +697,14 @@ def _get_or_create_elder(user_name, user_age=""):
     return elder
 
 
+def _local_iso(value):
+    if value is None:
+        return None
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    return timezone.localtime(value, timezone.get_current_timezone()).isoformat()
+
+
 def _serialize_reminder(reminder):
     decision = reminder.agent_decisions.first()
     return {
@@ -705,7 +713,7 @@ def _serialize_reminder(reminder):
         "user_age": reminder.user_age,
         "medicine_name": reminder.medicine_name,
         "scheduled_time": reminder.scheduled_time,
-        "scheduled_datetime": reminder.scheduled_datetime.isoformat() if reminder.scheduled_datetime else None,
+        "scheduled_datetime": _local_iso(reminder.scheduled_datetime),
         "dose_count": reminder.dose_count,
         "reminder_hint": reminder.reminder_hint,
         "slot": reminder.slot,
@@ -714,7 +722,7 @@ def _serialize_reminder(reminder):
         "status": reminder.status,
         "agent_state": reminder.agent_state,
         "reminder_count": reminder.reminder_count,
-        "taken_at": reminder.taken_at.isoformat() if reminder.taken_at else None,
+        "taken_at": _local_iso(reminder.taken_at),
         "confirmation_source": reminder.confirmation_source,
         "source": reminder.source,
         "agent_decision": (
@@ -732,7 +740,7 @@ def _serialize_reminder(reminder):
                 ],
                 "reasoning": decision.reasoning,
                 "execution_result": decision.execution_result,
-                "updated_at": decision.updated_at.isoformat(),
+                "updated_at": _local_iso(decision.updated_at),
             }
             if decision
             else None
@@ -769,9 +777,9 @@ def _serialize_intervention(item):
         "state": item.state,
         "channel": item.channel,
         "message": item.message,
-        "created_at": item.created_at.isoformat(),
-        "delivered_at": item.delivered_at.isoformat() if item.delivered_at else None,
-        "acknowledged_at": item.acknowledged_at.isoformat() if item.acknowledged_at else None,
+        "created_at": _local_iso(item.created_at),
+        "delivered_at": _local_iso(item.delivered_at),
+        "acknowledged_at": _local_iso(item.acknowledged_at),
         "reminder": _serialize_reminder(reminder) if reminder else None,
     }
 
@@ -782,7 +790,7 @@ def api_health(request):
         {
             "status": "ok",
             "service": "smart-medicine-box",
-            "time": timezone.now().isoformat(),
+            "time": timezone.localtime().isoformat(),
             "dataset_documents": DrugKnowledgeDocument.objects.count(),
             "slot_count": SLOT_COUNT,
             "slots": slot_payload(),
