@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -63,10 +64,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val DEFAULT_BASE_URL = "http://10.0.2.2:8000/api/v1/"
         private const val DEFAULT_TOKEN = "smartpill-dev-token"
         private const val DEFAULT_DEVICE = "pillbox-01"
-        private const val REQUIRED_UI_REVISION = 6
+        private const val REQUIRED_UI_REVISION = 8
 
         private const val REQUEST_SPEECH = 1201
         private const val REQUEST_RECORD_AUDIO = 1202
+        private const val REQUEST_NOTIFICATIONS = 1203
         private val TAIPEI_TIME_ZONE: TimeZone = TimeZone.getTimeZone("Asia/Taipei")
     }
 
@@ -77,6 +79,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun taipeiDateFormat(pattern: String, locale: Locale = Locale.TAIWAN) =
         SimpleDateFormat(pattern, locale).apply { timeZone = TAIPEI_TIME_ZONE }
+
+    private fun requestReminderPermission() {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATIONS
+            )
+        }
+    }
 
     private lateinit var tabHost: TabHost
     private lateinit var tvHeaderTime: TextView
@@ -189,6 +205,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         loadSavedSettings()
         setupDateTimeFields()
         setupActions()
+        requestReminderPermission()
+        AgentSyncScheduler.start(this)
 
         tts = TextToSpeech(this, this)
         mainHandler.post(clockRunnable)
@@ -270,12 +288,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun setupTabs() {
         tabHost.setup()
-        addTab("today", "今日任務", R.id.tabToday)
         addTab("add", "臨時服藥", R.id.tabAdd)
-        addTab("schedule", "固定排程", R.id.tabSchedule)
-        addTab("agent", "Agent 追蹤", R.id.tabAgent)
-        addTab("qa", "語音衛教", R.id.tabQa)
-        addTab("settings", "連線設定", R.id.tabSettings)
+        addTab("today", "服藥狀況", R.id.tabToday)
+        addTab("schedule", "吃藥時間", R.id.tabSchedule)
+        addTab("agent", "提醒追蹤", R.id.tabAgent)
+        addTab("qa", "語音問藥", R.id.tabQa)
+        addTab("dataset", "藥物資料", R.id.tabDataset)
+        addTab("settings", "手機姓名設定", R.id.tabSettings)
         tabHost.currentTab = 0
         styleTabs()
         tabHost.setOnTabChangedListener {
@@ -302,15 +321,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         for (i in 0 until tabHost.tabWidget.tabCount) {
             val selected = i == tabHost.currentTab
             val child = tabHost.tabWidget.getChildAt(i)
-            val palette = intArrayOf(
-                R.color.palette_mint,
-                R.color.palette_blue,
-                R.color.palette_aqua,
-                R.color.palette_sage,
-                R.color.palette_plum
-            )
             child.setBackgroundColor(
-                ContextCompat.getColor(this, if (selected) R.color.palette_plum else palette[i % palette.size])
+                ContextCompat.getColor(this, if (selected) R.color.palette_plum else R.color.palette_mint)
             )
             (child as? TextView)?.setTextColor(
                 ContextCompat.getColor(this, if (selected) android.R.color.white else R.color.text_primary)
@@ -464,7 +476,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         findViewById<Button>(R.id.btnSaveSettings).setOnClickListener {
             saveSettings()
-            toast("連線設定已儲存")
+            toast("手機姓名與連線設定已儲存")
         }
         findViewById<Button>(R.id.btnTestConnection).setOnClickListener { testConnection() }
         findViewById<Button>(R.id.btnOpenRegister).setOnClickListener { openAccountPage("register/") }
@@ -515,7 +527,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val userName = editDefaultUser.text.toString().trim()
             .ifBlank { editAddUserName.text.toString().trim() }
         if (userName.isBlank()) {
-            tvTodayStatus.text = "請先到「連線設定」填入預設長輩姓名。"
+            tvTodayStatus.text = "請先到「手機姓名設定」填入預設長輩姓名。"
             adapter.submitList(emptyList())
             updateDashboard(emptyList())
             return
@@ -529,8 +541,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val items = parseReminderArray(response.optJSONArray("results"))
                 adapter.submitList(items)
                 updateDashboard(items)
+                AgentReminderScheduler.scheduleAll(this, items)
                 tvTodayStatus.text = if (items.isEmpty()) {
-                    "$userName 今天尚無服藥任務。可由 App 新增臨時服藥，或建立固定排程。"
+                    "$userName 今天尚無服藥任務。可到「臨時服藥」新增一次性任務，或到「吃藥時間」建立長期設定。"
                 } else {
                     "已同步 ${items.size} 筆；資料來源為 Django API。"
                 }
@@ -560,12 +573,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val userName = editDefaultUser.text.toString().trim()
             .ifBlank { editAddUserName.text.toString().trim() }
         if (userName.isBlank()) {
-            tvAgentStatus.text = "請先到連線設定填入照護對象姓名。"
+            tvAgentStatus.text = "請先到手機姓名設定填入照護對象姓名。"
             agentAdapter.submitList(emptyList())
             return
         }
         val date = taipeiDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        tvAgentStatus.text = "正在讀取今天的 Agent 追蹤進度…"
+        tvAgentStatus.text = "正在讀取今天的提醒追蹤進度…"
         executeApi(
             task = { apiClient().reminders(userName, date) },
             onSuccess = { response ->
@@ -686,13 +699,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             scheduleAdapter.submitList(emptyList())
             return
         }
-        tvScheduleStatus.text = "正在載入固定排程…"
+        tvScheduleStatus.text = "正在載入吃藥時間…"
         executeApi(
             task = { apiClient().schedules(userName) },
             onSuccess = { response ->
                 val items = parseScheduleArray(response.optJSONArray("results"))
                 scheduleAdapter.submitList(items)
-                tvScheduleStatus.text = if (items.isEmpty()) "尚無固定排程。" else "已載入 ${items.size} 筆固定排程。"
+                tvScheduleStatus.text = if (items.isEmpty()) "尚未設定吃藥時間。" else "已載入 ${items.size} 筆吃藥時間。"
             },
             onError = { message ->
                 scheduleAdapter.submitList(emptyList())
@@ -736,7 +749,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             .put("is_active", true)
 
         btnSaveSchedule.isEnabled = false
-        tvScheduleStatus.text = "正在儲存固定排程…"
+        tvScheduleStatus.text = "正在儲存吃藥時間…"
         saveFormDrafts()
         val editingId = editingScheduleId
         executeApi(
@@ -746,9 +759,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             },
             onSuccess = {
                 btnSaveSchedule.isEnabled = true
-                tvScheduleStatus.text = if (editingId == null) "固定排程已新增。" else "固定排程已更新。"
+                tvScheduleStatus.text = if (editingId == null) "吃藥時間已新增。" else "吃藥時間已更新。"
                 editingScheduleId = null
-                btnSaveSchedule.text = "儲存固定排程"
+                btnSaveSchedule.text = "儲存吃藥時間"
                 editDefaultUser.setText(userName)
                 editDefaultDevice.setText(deviceId)
                 loadSchedules()
@@ -774,13 +787,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         updateTimeFields()
         updateSlotButtons()
         updateWeekdayButton()
-        btnSaveSchedule.text = "更新固定排程"
+        btnSaveSchedule.text = "更新吃藥時間"
         tvScheduleStatus.text = "正在編輯 #${schedule.id}。"
     }
 
     private fun clearScheduleForm() {
         editingScheduleId = null
-        btnSaveSchedule.text = "儲存固定排程"
+        btnSaveSchedule.text = "儲存吃藥時間"
         editScheduleMedicine.setText("")
         editScheduleDose.setText("1")
         editScheduleHint.setText("飯後服用")
@@ -795,11 +808,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun confirmDeleteSchedule(schedule: ScheduleItem) {
         AlertDialog.Builder(this)
-            .setTitle("刪除固定排程")
-            .setMessage("確定刪除「${schedule.medicineName}」這筆固定排程？")
+            .setTitle("刪除吃藥時間")
+            .setMessage("確定刪除「${schedule.medicineName}」這筆吃藥時間？")
             .setNegativeButton("取消", null)
             .setPositiveButton("刪除") { _, _ ->
-                tvScheduleStatus.text = "正在刪除固定排程…"
+                tvScheduleStatus.text = "正在刪除吃藥時間…"
                 executeApi(
                     task = { apiClient().deleteSchedule(schedule.id) },
                     onSuccess = { loadSchedules() },
@@ -814,6 +827,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         executeApi(
             task = { apiClient().markTaken(reminder.id) },
             onSuccess = {
+                AgentReminderScheduler.cancel(this, reminder.id)
                 toast("已同步服藥確認")
                 loadTodayReminders()
             },
@@ -830,7 +844,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 tvTodayStatus.text = "正在刪除…"
                 executeApi(
                     task = { apiClient().deleteReminder(reminder.id) },
-                    onSuccess = { loadTodayReminders() },
+                    onSuccess = {
+                        AgentReminderScheduler.cancel(this, reminder.id)
+                        loadTodayReminders()
+                    },
                     onError = { tvTodayStatus.text = it }
                 )
             }
@@ -849,16 +866,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val slots = response.optJSONArray("slots")
                 val layout = response.optString("pillbox_layout")
                 val uiRevision = response.optInt("ui_revision", -1)
+                val agent = response.optJSONObject("agent")
                 if (!SlotLabels.healthContractIsThreeSlot(slotCount, slots)
                     || layout != "early-noon-evening-3-slot"
                     || uiRevision != REQUIRED_UI_REVISION
                 ) {
-                    tvSettingsStatus.text = "後端版本不符：請啟動 6_workflow_smart_medicine_box_Django_re，並確認 API 版本為 6。"
-                    tvHeaderConnection.text = "Django API：版本不符（需要第 6 版）"
+                    tvSettingsStatus.text = "後端版本不符：請確認網頁程式與 App 版本相符。"
+                    tvHeaderConnection.text = "Django API：版本不符"
                     return@executeApi
                 }
-                tvSettingsStatus.text = "連線成功：$service；第 6 版早／中／晚三格 API 已確認；資料文件 $count 筆。"
-                tvHeaderConnection.text = "Django API：已連線 · 第 6 版"
+                val agentMessage = agent?.optString("message")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "未取得 Agent 狀態。"
+                tvSettingsStatus.text = "連線成功：$service；資料文件 $count 筆。\nHybrid AI Agent：$agentMessage"
+                tvHeaderConnection.text = "Django API：已連線"
             },
             onError = { message ->
                 tvSettingsStatus.text = connectionMessage(message)
@@ -877,7 +898,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         btnAskQa.isEnabled = false
         btnSpeakAnswer.isEnabled = false
-        tvQaStatus.text = "APP 正在直接查詢 FDA 公開藥品資料…"
+        tvQaStatus.text = "APP 正在查詢內建食藥署資料與 FDA 公開資料…"
         tvQaAnswer.text = "查詢中…"
         tvQaEvidence.text = "資料證據：查詢中"
 
@@ -887,8 +908,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 mainHandler.post {
                     medicationEducationAgent.answerInChinese(
                         draft = draft,
-                        onPreparingModel = {
-                            tvQaStatus.text = "正在準備手機內中文翻譯模型；第一次使用可能需要一些時間…"
+                        onPreparingModel = { status ->
+                            tvQaStatus.text = status
                         },
                         onSuccess = { result ->
                             btnAskQa.isEnabled = true
@@ -897,11 +918,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             tvQaEvidence.text = result.evidence
                             btnSpeakAnswer.isEnabled = latestAnswer.isNotBlank()
                             tvQaStatus.text = buildString {
-                                append("回答完成；問題類型：${result.questionLabel}")
-                                append(if (result.qualityPassed) "；Agent 合理性檢查：通過" else "；Agent 合理性檢查：已攔截")
-                                append("；由 APP 直接查詢 FDA")
-                                if (result.usedDownloadedModel) append("；已在手機內翻成中文")
-                                if (result.fromCache) append("；使用先前儲存的資料")
+                                append("${result.questionLabel}｜採用 1 筆可追溯資料")
+                                append("｜來源：${result.sourceName}")
+                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 手機內模型")
+                                if (result.fromCache) append("｜已儲存在手機")
                             }
                             speakLatestAnswer()
                         },

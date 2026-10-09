@@ -22,6 +22,8 @@
 *.iml
 *.apk
 *.aab
+models/
+**/models/
 
 # Operating system files
 .DS_Store

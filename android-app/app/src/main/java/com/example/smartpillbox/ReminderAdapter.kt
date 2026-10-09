@@ -49,19 +49,24 @@ class ReminderAdapter(
         val slotText = SlotLabels.display(item.slot, item.slotLabel)
         holder.meta.text = "$slotText · ${item.deviceId.ifBlank { "未指定裝置" }}"
         holder.agent.text = buildString {
-            append("追蹤進度：${agentStateLabel(item.agentState)}")
-            append("\n確認依據：${confirmationLabel(item.confirmationSource)}")
-            append(" · 來源：${sourceLabel(item.source)}")
-            append(" · 提醒 ${item.reminderCount} 次")
             item.agentDecision?.let { decision ->
-                append("\nAgent 風險：${decision.riskLabel}（${decision.riskScore}）")
-                append(" · ${decision.plannerLabel}")
+                append("AI 現在看到：${decision.situationSummary.ifBlank { agentStateLabel(item.agentState) }}")
                 if (decision.toolLabels.isNotEmpty()) {
-                    append("\n選擇動作：${decision.toolLabels.joinToString("、")}")
+                    append("\nAI 決定：${decision.toolLabels.joinToString("、")}")
                 }
                 if (decision.reasoning.isNotBlank()) {
-                    append("\n判斷理由：${decision.reasoning}")
+                    append("\n為什麼：${decision.reasoning}")
                 }
+                if (decision.notificationMessage.isNotBlank()) {
+                    append("\n這次通知：${decision.notificationMessage}")
+                }
+                if (decision.nextStepSummary.isNotBlank()) {
+                    append("\n接下來：${decision.nextStepSummary}")
+                }
+            } ?: append("AI 現在看到：${agentStateLabel(item.agentState)}")
+            append("\n服藥確認：${confirmationLabel(item.confirmationSource)}")
+            if (item.reminderCount > 0) {
+                append("｜已提醒 ${item.reminderCount} 次")
             }
         }
 
@@ -111,11 +116,4 @@ class ReminderAdapter(
         else -> "尚無證據"
     }
 
-    private fun sourceLabel(value: String): String = when (value) {
-        "schedule" -> "固定排程"
-        "web" -> "網頁臨時新增"
-        "android" -> "Android 臨時新增"
-        "sensor" -> "感測器"
-        else -> "未知"
-    }
 }

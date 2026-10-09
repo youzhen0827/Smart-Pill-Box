@@ -1,0 +1,6 @@
+資料集：台灣食藥署未註銷藥品許可證
+來源：https://data.gov.tw/dataset/9123
+官方下載：https://data.fda.gov.tw/data/opendata/export/37/json
+授權：政府資料開放授權條款第 1 版
+擷取日期：2026-09-21
+用途：APP 獨立查詢繁體中文藥名、適應症、用法用量與主成分。

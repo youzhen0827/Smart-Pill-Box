@@ -12,10 +12,37 @@ internal enum class EducationQuestionKind {
     GENERAL
 }
 
-internal data class EducationAnswerReview(val passed: Boolean, val message: String)
+internal data class EducationValidationCheck(val label: String, val passed: Boolean)
+
+internal data class EducationAnswerReview(
+    val passed: Boolean,
+    val score: Int,
+    val message: String,
+    val checks: List<EducationValidationCheck>
+)
 
 internal object MedicationEducationLogic {
     private val englishWord = Regex("\\b[A-Za-z]{3,}\\b")
+    private val unrelatedContent = Regex(
+        "(?:大哥大|廣告|促銷|優惠|訂閱|按讚|分享|購物|客服專線|手機門號|電信方案|" +
+            "點擊(?:此處|連結)|這是(?:幾句|一段).{0,16}(?:簡述|摘要)|我是(?:一個)?AI|作為AI)",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun normalizedIdentity(value: String): String = value
+        .lowercase()
+        .replace(Regex("[^a-z0-9\\u3400-\\u9fff]"), "")
+
+    fun identityScore(query: String, candidates: List<String>): Int {
+        val normalizedQuery = normalizedIdentity(query)
+        val names = candidates.map(::normalizedIdentity).filter(String::isNotBlank)
+        if (normalizedQuery.length < 2 || names.isEmpty()) return 0
+        if (names.any { it == normalizedQuery }) return 100
+        return if (
+            normalizedQuery.length >= 4 &&
+            names.any { it.contains(normalizedQuery) || normalizedQuery.contains(it) }
+        ) 90 else 0
+    }
 
     private val offlineTerms = linkedMapOf(
         "Treatment of Type 2 diabetes mellitus" to "用於治療第 2 型糖尿病",
@@ -187,6 +214,66 @@ internal object MedicationEducationLogic {
         return result
     }
 
+    fun cleanSourceText(text: String): String {
+        val parts = text
+            .replace(Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]"), " ")
+            .split(Regex("(?<=[。！？!?;；])\\s*|\\n+"))
+            .map(String::trim)
+            .filter { it.isNotBlank() && !unrelatedContent.containsMatchIn(it) }
+        return parts.joinToString(" ").replace(Regex("\\s+"), " ").trim()
+    }
+
+    private fun chineseBigrams(text: String): Set<String> {
+        val chars = Regex("[\\u3400-\\u9fff]").findAll(text).joinToString("") { it.value }
+        return if (chars.length < 2) emptySet() else (0 until chars.length - 1)
+            .map { chars.substring(it, it + 2) }
+            .toSet()
+    }
+
+    fun isGeneratedAnswerSafe(
+        kind: EducationQuestionKind,
+        sourceText: String,
+        answer: String
+    ): Boolean {
+        val candidate = simplifyChinese(answer)
+        if (
+            candidate.isBlank() ||
+            candidate.length > 420 ||
+            unrelatedContent.containsMatchIn(candidate) ||
+            Regex("(?:請|可以)?自行(?:停藥|加量|減量|改藥)|一次吃兩倍").containsMatchIn(candidate)
+        ) return false
+
+        val sourceNumbers = Regex("\\d+(?:\\.\\d+)?").findAll(sourceText).map { it.value }.toSet()
+        val answerNumbers = Regex("\\d+(?:\\.\\d+)?").findAll(candidate).map { it.value }.toSet()
+        if (!sourceNumbers.containsAll(answerNumbers)) return false
+
+        val sourceBigrams = chineseBigrams(sourceText)
+        if (sourceBigrams.isNotEmpty()) {
+            val sentences = candidate.split(Regex("(?<=[。！？!?;；])\\s*|\\n+"))
+                .map(String::trim)
+                .filter(String::isNotBlank)
+            if (sentences.any { sentence ->
+                    val chineseLength = Regex("[\\u3400-\\u9fff]").findAll(sentence).count()
+                    chineseLength >= 4 &&
+                        (chineseBigrams(sentence) intersect sourceBigrams).size <
+                        (if (chineseLength < 8) 1 else 2)
+                }
+            ) return false
+        } else {
+            val signals = when (kind) {
+                EducationQuestionKind.INDICATIONS -> listOf("用於", "治療", "控制", "預防", "緩解", "改善")
+                EducationQuestionKind.ADVERSE_REACTIONS -> listOf("副作用", "可能", "不舒服", "症狀")
+                EducationQuestionKind.DOSAGE -> listOf("服用", "劑量", "每天", "每日", "錠", "粒", "毫克")
+                EducationQuestionKind.INTERACTIONS -> listOf("一起", "交互作用", "其他藥", "同時")
+                EducationQuestionKind.WARNINGS -> listOf("注意", "警告", "不要", "禁忌", "風險")
+                EducationQuestionKind.MISSED_DOSE -> listOf("漏服", "忘記", "補吃", "下一次")
+                EducationQuestionKind.GENERAL -> listOf("藥", "用於", "服用", "治療")
+            }
+            if (signals.none(candidate::contains)) return false
+        }
+        return true
+    }
+
     fun translationChunks(text: String, maxChars: Int = 420): List<String> {
         val sentences = text.split(Regex("(?<=[.!?;])\\s+|\\n+"))
         val chunks = mutableListOf<String>()
@@ -244,19 +331,41 @@ internal object MedicationEducationLogic {
         kind: EducationQuestionKind,
         sectionField: String,
         sourceText: String,
-        translatedText: String
+        translatedText: String,
+        identityScore: Int = 100
     ): EducationAnswerReview {
         val concise = conciseAnswer(translatedText)
         val remainingEnglish = englishWord.containsMatchIn(
-            concise.replace(Regex("\\b(?:FDA|USP|NDC|API)\\b"), "")
+            concise.replace(
+                Regex("\\b(?:FDA|USP|NDC|API|HIV|AIDS|COVID|COPD|mg|mcg|ml|mL|mEq)\\b", RegexOption.IGNORE_CASE),
+                ""
+            ).replace(Regex("\\b[A-Z]{2,8}\\b"), "")
         )
-        val checksPassed = sectionField in fieldCandidates(kind) &&
-            sourceText.isNotBlank() && concise.isNotBlank() &&
-            concise.length <= 321 && !remainingEnglish
-        return if (checksPassed) {
-            EducationAnswerReview(true, "問題類型、FDA 資料區段、回答長度與中文內容均已核對。")
+        val checks = listOf(
+            EducationValidationCheck("有可追溯的藥物資料", sourceText.isNotBlank()),
+            EducationValidationCheck("資料與查詢藥物相符", identityScore >= 70),
+            EducationValidationCheck("內容只回答目前問題", sectionField in fieldCandidates(kind)),
+            EducationValidationCheck(
+                "中文完整、內容有來源且適合閱讀",
+                concise.isNotBlank() &&
+                    !remainingEnglish &&
+                    isGeneratedAnswerSafe(kind, sourceText, concise)
+            ),
+            EducationValidationCheck("回答保持精簡", concise.length <= 321),
+            EducationValidationCheck(
+                "沒有自行停藥或改量建議",
+                !Regex("(?:請|可以)?自行(?:停藥|加量|減量|改藥)|一次吃兩倍").containsMatchIn(concise)
+            )
+        )
+        val weights = listOf(20, 20, 20, 20, 10, 10)
+        val score = checks.zip(weights).sumOf { (check, weight) -> if (check.passed) weight else 0 }
+        val criticalPassed = checks.take(4).all { it.passed } && checks.last().passed
+        val passed = score >= 80 && criticalPassed
+        val message = if (passed) {
+            "已核對藥名、問題、資料來源、中文與用藥安全。"
         } else {
-            EducationAnswerReview(false, "回答與問題或資料來源不完全相符，Agent 已停止顯示。")
+            "未通過：${checks.filterNot { it.passed }.joinToString("、") { it.label }}。"
         }
+        return EducationAnswerReview(passed, score, message, checks)
     }
 }

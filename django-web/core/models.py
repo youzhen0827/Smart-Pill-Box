@@ -85,7 +85,7 @@ class MedicationSchedule(models.Model):
         help_text="1=週一，7=週日；用逗號分隔。",
     )
     grace_minutes = models.PositiveIntegerField("感測器等待分鐘", default=10)
-    missed_after_minutes = models.PositiveIntegerField("漏服判定分鐘", default=60)
+    missed_after_minutes = models.PositiveIntegerField("漏服判定分鐘", default=30)
     device_id = models.CharField("藥盒裝置 ID", max_length=80, default="pillbox-01")
     is_active = models.BooleanField("啟用", default=True)
     created_at = models.DateTimeField("建立時間", auto_now_add=True)
@@ -417,6 +417,7 @@ class DrugKnowledgeDocument(models.Model):
         ("openfda_ndc", "FDA NDC Directory"),
         ("openfda_label", "FDA Drug Label"),
         ("kaggle_csv", "Kaggle Drug Interactions / Side Effects CSV"),
+        ("tfda_license", "台灣食藥署未註銷藥品許可證"),
     ]
 
     source_type = models.CharField("資料來源", max_length=30, choices=SOURCE_TYPES)
@@ -469,7 +470,11 @@ class DrugKnowledgeDocument(models.Model):
 
 
 class DatasetSyncRun(models.Model):
-    SOURCES = [("openfda", "openFDA"), ("kaggle_csv", "Kaggle CSV")]
+    SOURCES = [
+        ("openfda", "openFDA"),
+        ("kaggle_csv", "Kaggle CSV"),
+        ("tfda", "台灣食藥署"),
+    ]
     STATES = [("running", "執行中"), ("success", "成功"), ("failed", "失敗")]
 
     source = models.CharField("來源", max_length=30, choices=SOURCES)

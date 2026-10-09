@@ -1,8 +1,8 @@
 {% extends "core/base.html" %}
-{% block title %}監控中心{% endblock %}
+{% block title %}服藥狀況{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-5"><div><h1 class="text-2xl font-black text-brand">監控中心</h1><p class="text-sm text-slate-500">{{ today }}｜整合今日任務、追蹤進度與需要處理的項目</p></div><div class="flex items-center gap-3"><a href="{% url 'reminder_create' %}" class="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold">新增臨時服藥</a><a href="{% url 'schedules' %}" class="text-brand underline text-sm font-semibold">管理固定排程</a></div></div>
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-5"><div><h1 class="text-2xl font-black text-brand">服藥狀況</h1></div><div class="flex items-center gap-3"><a href="{% url 'reminder_create' %}" class="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold">新增臨時服藥</a><a href="{% url 'schedules' %}" class="text-brand underline text-sm font-semibold">管理吃藥時間</a></div></div>
   <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
     <div class="card p-4 text-center"><div class="text-3xl font-black text-brand">{{ stats.total }}</div><div class="text-xs text-slate-400">今日總數</div></div>
     <div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-600">{{ stats.pending }}</div><div class="text-xs text-slate-400">尚未到時間</div></div>
@@ -21,16 +21,16 @@
     </section>
     <aside class="space-y-5">
       <section class="card p-5">
-        <h2 class="font-bold text-brand mb-2">AI Agent 追蹤與語音衛教</h2>
-        <p class="text-xs text-slate-500 leading-5 mb-3">追蹤頁說明系統進度；語音衛教頁提供藥物知識問答。</p>
+        <h2 class="font-bold text-brand mb-2">提醒追蹤與語音問藥</h2>
+        <p class="text-xs text-slate-500 leading-5 mb-3">提醒追蹤會說明目前進度；語音問藥可查詢藥物用途與注意事項。</p>
         <div class="flex flex-wrap gap-2">
-          <a href="{% url 'agent_center' %}" class="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold">Agent 追蹤</a>
-          <a href="{% url 'qa_center' %}" class="bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold">語音衛教</a>
+          <a href="{% url 'agent_center' %}" class="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold">提醒追蹤</a>
+          <a href="{% url 'qa_center' %}" class="bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold">語音問藥</a>
         </div>
       </section>
       <section class="card p-5">
         <div class="flex items-center justify-between gap-2 mb-3">
-          <h2 class="font-bold text-brand">早／中／晚三格藥盒感測狀態 <span class="text-[10px] font-normal text-emerald-600">三格版 {{ three_slot_revision }}</span></h2>
+          <h2 class="font-bold text-brand">早／中／晚藥盒感測狀態</h2>
           <span class="text-[11px] text-slate-400">{{ selected_device_id|default:"尚未綁定裝置" }}</span>
         </div>
         <div class="grid grid-cols-3 gap-2" data-slot-count="{{ slot_count }}">

@@ -43,8 +43,13 @@ from .models import (
     SensorEvent,
     UserProfile,
 )
-from .services.agent_planner import TOOL_LABELS
-from .services.dataset_service import DatasetServiceError, import_kaggle_csv, sync_openfda
+from .services.agent_planner import EVIDENCE_LABELS, TOOL_LABELS, agent_runtime_status
+from .services.dataset_service import (
+    DatasetServiceError,
+    import_kaggle_csv,
+    sync_openfda,
+    sync_tfda_active_licenses,
+)
 from .services.medication_agent import mark_reminder_taken, match_sensor_event, run_agent_cycle
 from .slots import SLOT_COUNT, is_valid_slot, period_for_slot, slot_label, slot_payload
 from .services.qa_agent import answer_medication_question
@@ -102,7 +107,7 @@ def register(request):
             user = form.save()
             UserProfile.objects.get_or_create(user=user)
             login(request, user)
-            messages.success(request, "帳號建立完成。請設定 Android 使用者姓名。")
+            messages.success(request, "帳號建立完成。請設定手機使用者姓名。")
             return redirect("android_name_settings")
     else:
         form = AccountRegistrationForm()
@@ -190,7 +195,7 @@ def android_name_settings(request):
             names = split_android_names(profile.android_name)
             if names:
                 Reminder.objects.filter(owner__isnull=True, user_name__in=names).update(owner=request.user)
-            messages.success(request, "Android 使用者姓名名單已更新。")
+            messages.success(request, "手機使用者姓名名單已更新。")
             return redirect("dashboard")
     else:
         form = UserProfileForm(instance=profile)
@@ -279,11 +284,11 @@ def schedule_create(request):
         form = MedicationScheduleForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
-            messages.success(request, "週期服藥排程已建立，Agent 會依星期與時間產生任務。")
+            messages.success(request, "吃藥時間已建立，系統會依星期與時間產生任務。")
             return redirect("schedules")
     else:
         form = MedicationScheduleForm(user=request.user)
-    return render(request, "core/schedule_form.html", {"form": form, "title": "新增週期服藥排程"})
+    return render(request, "core/schedule_form.html", {"form": form, "title": "新增吃藥時間"})
 
 
 @login_required
@@ -297,7 +302,7 @@ def schedule_edit(request, schedule_id):
             return redirect("schedules")
     else:
         form = MedicationScheduleForm(instance=schedule, user=request.user)
-    return render(request, "core/schedule_form.html", {"form": form, "title": "編輯週期服藥排程"})
+    return render(request, "core/schedule_form.html", {"form": form, "title": "編輯吃藥時間"})
 
 
 @login_required
@@ -356,18 +361,42 @@ def drug_search_options(request):
     drugs = Drug.objects.filter(
         Q(name_zh__icontains=query) | Q(generic_name__icontains=query) | Q(fda_product_ndc__icontains=query)
     )[:12]
-    return JsonResponse(
-        {
-            "results": [
+    results = []
+    seen = set()
+    for drug in drugs:
+        value = drug.name_zh or drug.generic_name or drug.fda_product_ndc
+        if not value or value.casefold() in seen:
+            continue
+        seen.add(value.casefold())
+        results.append(
+            {
+                "label": f"{value}"
+                + (f" / {drug.generic_name}" if drug.generic_name and drug.generic_name != drug.name_zh else ""),
+                "value": value,
+            }
+        )
+    if len(results) < 12:
+        documents = DrugKnowledgeDocument.objects.filter(
+            Q(generic_name__icontains=query)
+            | Q(brand_name__icontains=query)
+            | Q(product_ndc__icontains=query)
+            | Q(source_id__icontains=query)
+        )[:20]
+        for document in documents:
+            value = document.brand_name or document.generic_name or document.source_id
+            if not value or value.casefold() in seen:
+                continue
+            seen.add(value.casefold())
+            results.append(
                 {
-                    "label": f"{drug.name_zh or drug.generic_name}"
-                    + (f" / {drug.generic_name}" if drug.generic_name and drug.generic_name != drug.name_zh else ""),
-                    "value": drug.name_zh or drug.generic_name or drug.fda_product_ndc,
+                    "label": value
+                    + (f" / {document.generic_name}" if document.generic_name and document.generic_name != value else ""),
+                    "value": value,
                 }
-                for drug in drugs
-            ]
-        }
-    )
+            )
+            if len(results) >= 12:
+                break
+    return JsonResponse({"results": results})
 
 
 @login_required
@@ -383,6 +412,16 @@ def dataset_center(request):
                 return redirect("dataset_center")
             except DatasetServiceError as exc:
                 messages.error(request, str(exc))
+    elif request.method == "POST" and "sync_tfda" in request.POST:
+        try:
+            result = sync_tfda_active_licenses()
+            messages.success(
+                request,
+                f"台灣食藥署同步完成：新增 {result.added}、更新 {result.updated} 筆繁體中文資料。",
+            )
+            return redirect("dataset_center")
+        except DatasetServiceError as exc:
+            messages.error(request, str(exc))
     elif request.method == "POST" and "import_kaggle" in request.POST:
         kaggle_form = KaggleImportForm(request.POST, request.FILES, prefix="kaggle")
         if kaggle_form.is_valid():
@@ -412,6 +451,7 @@ def dataset_center(request):
         "ndc": DrugKnowledgeDocument.objects.filter(source_type="openfda_ndc").count(),
         "label": DrugKnowledgeDocument.objects.filter(source_type="openfda_label").count(),
         "kaggle": DrugKnowledgeDocument.objects.filter(source_type="kaggle_csv").count(),
+        "tfda": DrugKnowledgeDocument.objects.filter(source_type="tfda_license").count(),
     }
     return render(
         request,
@@ -492,12 +532,23 @@ def agent_center(request):
     ).select_related("reminder")[:30]
     decisions = list(
         AgentDecision.objects.filter(reminder__in=reminder_query)
-        .select_related("reminder")[:30]
+        .select_related("reminder")
+        .prefetch_related("reminder__interventions")[:30]
     )
     for decision in decisions:
         decision.tool_labels = "、".join(
             TOOL_LABELS.get(item, item) for item in decision.planned_tools
         )
+        validation = decision.execution_result.get("_agent_validation", {})
+        decision.confidence_percent = round(float(validation.get("confidence", 0)) * 100)
+        decision.evidence_labels = "、".join(
+            EVIDENCE_LABELS.get(item, item)
+            for item in validation.get("evidence_fields", [])
+        )
+        decision.validation_summary = validation.get("summary", "")
+        decision.situation_summary = _decision_situation(decision)
+        decision.next_step_summary = _decision_next_step(decision)
+        decision.notification_message = _decision_notification(decision)
     events = SensorEvent.objects.filter(
         Q(device_record__owner=request.user) | Q(user_name__in=profile_names),
         slot__range=(1, SLOT_COUNT),
@@ -516,6 +567,7 @@ def agent_center(request):
             "selected_date": selected_date,
             "selected_elder": selected_elder,
             "elders": Elder.objects.filter(owner=request.user),
+            "agent_runtime": agent_runtime_status(probe=True),
         },
     )
 
@@ -705,8 +757,77 @@ def _local_iso(value):
     return timezone.localtime(value, timezone.get_current_timezone()).isoformat()
 
 
+_TOOL_INTERVENTION_TYPES = {
+    "send_initial_reminder": "initial_reminder",
+    "send_followup_reminder": "sensor_missing",
+    "request_device_check": "device_check",
+    "escalate_caregiver": "caregiver_escalation",
+    "mark_probable_missed": "missed_escalation",
+}
+
+
+def _decision_situation(decision) -> str:
+    observation = decision.observation or {}
+    minutes_late = int(observation.get("minutes_late", 0) or 0)
+    stage_text = {
+        "before_due": "還沒到服藥時間，AI 正在等待。",
+        "due_window": "服藥時間已到，目前還沒有開盒或人工確認。",
+        "follow_up_window": f"已超過服藥時間 {minutes_late} 分鐘，目前仍沒有服藥證據。",
+        "overdue": f"已逾時 {minutes_late} 分鐘，達到疑似漏服標準。",
+        "sensor_confirmed": "已偵測到藥盒開啟，這次追蹤已完成。",
+    }.get(decision.stage, decision.get_stage_display())
+    details = []
+    if observation.get("device_health") == "offline":
+        details.append("藥盒目前沒有回報")
+    prior_missed = int(observation.get("prior_missed_30d", 0) or 0)
+    if prior_missed:
+        details.append(f"近 30 天有 {prior_missed} 次漏服")
+    return stage_text + (f" 同時發現：{'、'.join(details)}。" if details else "")
+
+
+def _decision_next_step(decision) -> str:
+    observation = decision.observation or {}
+    tools = set(decision.planned_tools or [])
+    if decision.stage == "sensor_confirmed":
+        return "停止後續提醒並記錄本次結果。"
+    if "mark_probable_missed" in tools:
+        return "等待照護者確認實際服藥情況。"
+    if "escalate_caregiver" in tools or "request_device_check" in tools:
+        return "等待照護者回應；收到服藥確認後會停止提醒。"
+    if decision.stage == "due_window":
+        return f"若 {int(observation.get('grace_minutes', 10) or 10)} 分鐘內仍未開盒，AI 會再次判斷。"
+    if decision.stage == "follow_up_window":
+        remaining = max(
+            0,
+            int(observation.get("missed_after_minutes", 30) or 30)
+            - int(observation.get("minutes_late", 0) or 0),
+        )
+        return f"若仍沒有服藥證據，約 {remaining} 分鐘後進入漏服確認。"
+    return "持續觀察時間、藥盒與人工確認結果。"
+
+
+def _decision_notification(decision) -> str:
+    intervention_types = {
+        _TOOL_INTERVENTION_TYPES[tool]
+        for tool in decision.planned_tools or []
+        if tool in _TOOL_INTERVENTION_TYPES
+    }
+    if not intervention_types:
+        return ""
+    interventions = sorted(
+        decision.reminder.interventions.all(),
+        key=lambda item: item.created_at,
+        reverse=True,
+    )
+    return next(
+        (item.message for item in interventions if item.intervention_type in intervention_types),
+        "",
+    )
+
+
 def _serialize_reminder(reminder):
     decision = reminder.agent_decisions.first()
+    validation = decision.execution_result.get("_agent_validation", {}) if decision else {}
     return {
         "id": reminder.id,
         "user_name": reminder.user_name,
@@ -722,6 +843,8 @@ def _serialize_reminder(reminder):
         "status": reminder.status,
         "agent_state": reminder.agent_state,
         "reminder_count": reminder.reminder_count,
+        "grace_minutes": reminder.schedule.grace_minutes if reminder.schedule_id else 10,
+        "missed_after_minutes": reminder.schedule.missed_after_minutes if reminder.schedule_id else 30,
         "taken_at": _local_iso(reminder.taken_at),
         "confirmation_source": reminder.confirmation_source,
         "source": reminder.source,
@@ -739,6 +862,15 @@ def _serialize_reminder(reminder):
                     TOOL_LABELS.get(item, item) for item in decision.planned_tools
                 ],
                 "reasoning": decision.reasoning,
+                "confidence_percent": round(float(validation.get("confidence", 0)) * 100),
+                "evidence_labels": [
+                    EVIDENCE_LABELS.get(item, item)
+                    for item in validation.get("evidence_fields", [])
+                ],
+                "validation_summary": validation.get("summary", ""),
+                "situation_summary": _decision_situation(decision),
+                "next_step_summary": _decision_next_step(decision),
+                "notification_message": _decision_notification(decision),
                 "execution_result": decision.execution_result,
                 "updated_at": _local_iso(decision.updated_at),
             }
@@ -795,7 +927,8 @@ def api_health(request):
             "slot_count": SLOT_COUNT,
             "slots": slot_payload(),
             "pillbox_layout": "early-noon-evening-3-slot",
-            "ui_revision": 6,
+            "ui_revision": 8,
+            "agent": agent_runtime_status(probe=True),
         }
     )
 
@@ -882,7 +1015,7 @@ def api_schedules(request):
             reminder_hint=str(data.get("reminder_hint") or "飯後服用")[:200],
             weekdays=_parse_weekdays_1_to_7(data.get("weekdays")),
             grace_minutes=max(1, int(data.get("grace_minutes") or 10)),
-            missed_after_minutes=max(2, int(data.get("missed_after_minutes") or 60)),
+            missed_after_minutes=max(2, int(data.get("missed_after_minutes") or 30)),
             device_id=str(data.get("device_id") or "pillbox-01")[:80],
             is_active=_parse_bool(data.get("is_active"), default=True),
         )

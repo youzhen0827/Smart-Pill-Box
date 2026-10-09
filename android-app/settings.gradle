@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "v2.1_Android_4"
+rootProject.name = "v2.1_Android_8_aiagent"
 include ':app'

@@ -75,16 +75,19 @@
       border-bottom: 5px solid var(--aqua);
       box-shadow: 0 6px 18px rgba(119, 104, 113, .18);
     }
-    .nav-link { border-bottom: 3px solid transparent; border-radius: 6px; }
-    .nav-link:hover { background-color: rgba(240, 247, 238, .14); color: #fff; }
-    .nav-link.is-active { color: var(--plum-dark) !important; }
-    .nav-home.is-active { background: var(--mint); border-color: var(--mint); }
-    .nav-monitor.is-active { background: var(--periwinkle); border-color: var(--periwinkle); }
-    .nav-schedule.is-active { background: var(--aqua); border-color: var(--aqua); }
-    .nav-agent.is-active { background: var(--sage); border-color: var(--sage); }
-    .nav-voice.is-active { background: var(--periwinkle); border-color: var(--periwinkle); }
-    .nav-data.is-active { background: var(--aqua); border-color: var(--aqua); }
-    .nav-android.is-active { background: var(--mint); border-color: var(--mint); }
+    .nav-link {
+      color: rgba(255, 255, 255, .82);
+      background: rgba(255, 255, 255, .08);
+      border: 2px solid transparent;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .nav-link:hover { background-color: rgba(240, 247, 238, .18); color: #fff; }
+    .nav-link.is-active {
+      color: var(--plum-dark) !important;
+      background: var(--aqua);
+      border-color: var(--mint);
+    }
     footer.bg-brand {
       background-color: var(--plum) !important;
       border-top: 6px solid var(--sage);
@@ -137,17 +140,17 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6">
     <div class="flex items-center justify-between min-h-16 gap-4">
       <a href="{% url 'home' %}" class="flex items-center gap-2 text-white font-black whitespace-nowrap">
-        <span class="text-2xl">💊</span><span>智慧藥盒平台</span><span class="text-[10px] bg-emerald-500/20 text-emerald-100 px-2 py-1 rounded-full">早中晚三格版</span>
+        <span class="text-2xl">💊</span><span>智慧藥盒平台</span>
       </a>
       <div class="hidden lg:flex items-center gap-1 text-sm">
-        <a href="{% url 'home' %}" class="nav-link nav-home px-3 py-2 {% if request.resolver_match.url_name == 'home' %}is-active{% else %}text-white/70{% endif %}">首頁</a>
+        <a href="{% url 'home' %}" class="nav-link px-3 py-2 {% if request.resolver_match.url_name == 'home' %}is-active{% endif %}">首頁</a>
         {% if user.is_authenticated %}
-          <a href="{% url 'dashboard' %}" class="nav-link nav-monitor px-3 py-2 {% if request.resolver_match.url_name == 'dashboard' %}is-active{% else %}text-white/70{% endif %}">監控中心</a>
-          <a href="{% url 'schedules' %}" class="nav-link nav-schedule px-3 py-2 {% if 'schedule' in request.resolver_match.url_name %}is-active{% else %}text-white/70{% endif %}">服藥排程</a>
-          <a href="{% url 'agent_center' %}" class="nav-link nav-agent px-3 py-2 {% if request.resolver_match.url_name == 'agent_center' %}is-active{% else %}text-white/70{% endif %}">AI Agent 追蹤</a>
-          <a href="{% url 'qa_center' %}" class="nav-link nav-voice px-3 py-2 {% if request.resolver_match.url_name == 'qa_center' %}is-active{% else %}text-white/70{% endif %}">語音衛教</a>
-          <a href="{% url 'dataset_center' %}" class="nav-link nav-data px-3 py-2 {% if request.resolver_match.url_name == 'dataset_center' %}is-active{% else %}text-white/70{% endif %}">資料集匯入</a>
-          <a href="{% url 'android_name_settings' %}" class="nav-link nav-android px-3 py-2 {% if request.resolver_match.url_name == 'android_name_settings' %}is-active{% else %}text-white/70{% endif %}">Android 名字</a>
+          <a href="{% url 'dashboard' %}" class="nav-link px-3 py-2 {% if request.resolver_match.url_name == 'dashboard' or 'reminder' in request.resolver_match.url_name %}is-active{% endif %}">服藥狀況</a>
+          <a href="{% url 'schedules' %}" class="nav-link px-3 py-2 {% if 'schedule' in request.resolver_match.url_name %}is-active{% endif %}">吃藥時間</a>
+          <a href="{% url 'agent_center' %}" class="nav-link px-3 py-2 {% if request.resolver_match.url_name == 'agent_center' %}is-active{% endif %}">提醒追蹤</a>
+          <a href="{% url 'qa_center' %}" class="nav-link px-3 py-2 {% if request.resolver_match.url_name == 'qa_center' %}is-active{% endif %}">語音問藥</a>
+          <a href="{% url 'dataset_center' %}" class="nav-link px-3 py-2 {% if 'dataset_' in request.resolver_match.url_name %}is-active{% endif %}">藥物資料</a>
+          <a href="{% url 'android_name_settings' %}" class="nav-link px-3 py-2 {% if request.resolver_match.url_name == 'android_name_settings' %}is-active{% endif %}">手機姓名設定</a>
         {% endif %}
       </div>
       <div class="flex items-center gap-2">
@@ -163,13 +166,13 @@
     </div>
     {% if user.is_authenticated %}
     <div class="lg:hidden flex gap-2 overflow-x-auto pb-3 text-xs whitespace-nowrap">
-      <a href="{% url 'home' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">首頁</a>
-      <a href="{% url 'dashboard' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">監控</a>
-      <a href="{% url 'schedules' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">排程</a>
-      <a href="{% url 'agent_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">Agent 追蹤</a>
-      <a href="{% url 'qa_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">衛教</a>
-      <a href="{% url 'dataset_center' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">資料集</a>
-      <a href="{% url 'android_name_settings' %}" class="px-3 py-1.5 rounded-full bg-white/10 text-white">Android 名字</a>
+      <a href="{% url 'home' %}" class="nav-link px-3 py-1.5 {% if request.resolver_match.url_name == 'home' %}is-active{% endif %}">首頁</a>
+      <a href="{% url 'dashboard' %}" class="nav-link px-3 py-1.5 {% if request.resolver_match.url_name == 'dashboard' or 'reminder' in request.resolver_match.url_name %}is-active{% endif %}">服藥狀況</a>
+      <a href="{% url 'schedules' %}" class="nav-link px-3 py-1.5 {% if 'schedule' in request.resolver_match.url_name %}is-active{% endif %}">吃藥時間</a>
+      <a href="{% url 'agent_center' %}" class="nav-link px-3 py-1.5 {% if request.resolver_match.url_name == 'agent_center' %}is-active{% endif %}">提醒追蹤</a>
+      <a href="{% url 'qa_center' %}" class="nav-link px-3 py-1.5 {% if request.resolver_match.url_name == 'qa_center' %}is-active{% endif %}">語音問藥</a>
+      <a href="{% url 'dataset_center' %}" class="nav-link px-3 py-1.5 {% if 'dataset_' in request.resolver_match.url_name %}is-active{% endif %}">藥物資料</a>
+      <a href="{% url 'android_name_settings' %}" class="nav-link px-3 py-1.5 {% if request.resolver_match.url_name == 'android_name_settings' %}is-active{% endif %}">手機姓名設定</a>
     </div>
     {% endif %}
   </div>

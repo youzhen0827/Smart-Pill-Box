@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import ctypes
+import html
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
 import requests
@@ -17,6 +18,13 @@ except ImportError:
     OpenCC = None
 
 from core.services.dataset_service import DatasetServiceError, sync_openfda
+from core.services.answer_validator import AnswerClaim, validate_answer
+from core.services.local_minicpm import (
+    LocalModelError,
+    model_ready,
+    naturalize_medication_answer,
+    translate_medical_text,
+)
 from core.services.rag_service import (
     concise_source_text,
     infer_question_types,
@@ -45,6 +53,11 @@ class QAResult:
     sync_message: str = ""
     quality_status: str = "passed"
     quality_message: str = "Agent 已核對問題、資料來源與回答內容。"
+    quality_score: int = 100
+    quality_checks: list[dict] = field(default_factory=list)
+    revision_count: int = 0
+    resolved_drug_name: str = ""
+    agent_summary: str = "已辨識問題、查找資料並完成回答檢查。"
 
 
 PLAIN_PREFIX = {
@@ -196,6 +209,60 @@ TRANSLATION_UNAVAILABLE_TEXT = (
     "這段藥物資料目前無法自動翻成中文。為避免翻錯，系統沒有顯示英文原文；"
     "請稍後再試，或請家人、醫師或藥師協助查看下方資料來源。"
 )
+
+UNRELATED_CONTENT = re.compile(
+    r"(?:大哥大|廣告|促銷|優惠|訂閱|按讚|分享|購物|客服專線|手機門號|電信方案|"
+    r"點擊(?:此處|連結)|這是(?:幾句|一段).{0,16}(?:簡述|摘要)|我是(?:一個)?AI|作為AI)",
+    re.IGNORECASE,
+)
+
+
+def _clean_medical_source(text: str) -> str:
+    """移除標記、控制字元及明顯與藥物無關的廣告內容。"""
+
+    cleaned = html.unescape(text or "")
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", cleaned)
+    parts = re.split(r"(?<=[。！？!?;；])\s*|\n+", cleaned)
+    kept = [part.strip() for part in parts if part.strip() and not UNRELATED_CONTENT.search(part)]
+    return re.sub(r"\s+", " ", " ".join(kept)).strip()
+
+
+def _chinese_bigrams(text: str) -> set[str]:
+    chars = "".join(re.findall(r"[\u3400-\u9fff]", text or ""))
+    return {chars[index : index + 2] for index in range(max(0, len(chars) - 1))}
+
+
+def _generated_answer_is_grounded(candidate: str, trusted_text: str) -> bool:
+    """逐句檢查改寫內容；任何無來源句子都讓系統使用安全回退答案。"""
+
+    cleaned = _simplify_chinese(candidate)
+    if (
+        not cleaned
+        or len(cleaned) > 700
+        or UNRELATED_CONTENT.search(cleaned)
+        or re.search(r"自行(?:停藥|加量|減量|換藥)|改變劑量|一次吃兩倍", cleaned)
+    ):
+        return False
+    trusted_bigrams = _chinese_bigrams(trusted_text)
+    if not trusted_bigrams:
+        return False
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[。！？!?;；])\s*|\n+", cleaned)
+        if part.strip()
+    ]
+    if not sentences:
+        return False
+    for sentence in sentences:
+        chars = "".join(re.findall(r"[\u3400-\u9fff]", sentence))
+        if len(chars) < 4:
+            continue
+        overlap = _chinese_bigrams(sentence) & trusted_bigrams
+        required = 1 if len(chars) < 8 else 2
+        if len(overlap) < required:
+            return False
+    return True
 
 
 def _has_english_words(text: str) -> bool:
@@ -397,6 +464,14 @@ def _translate_cached(text: str, base_url: str, api_key: str, service_url: str) 
     if not _has_english_words(offline_text):
         return offline_text, offline_text != text
 
+    if model_ready():
+        try:
+            translated = translate_medical_text(text)
+            if _usable_translation(text, translated):
+                return _simplify_chinese(translated), True
+        except LocalModelError as exc:
+            logger.warning("MiniCPM5-2B translation unavailable: %s", exc)
+
     if base_url:
         try:
             translated = _translate_with_libre(text, base_url, api_key)
@@ -430,7 +505,7 @@ def _translate_to_zh(text: str) -> tuple[str, bool]:
 def _plain_excerpt(text: str, *, max_chars: int = 700) -> str:
     """只截取來源內容，不補寫醫療事實；讓朗讀長度適合長輩。"""
 
-    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    cleaned = _clean_medical_source(text)
     if len(cleaned) <= max_chars:
         return cleaned
 
@@ -538,13 +613,13 @@ def answer_medication_question(
     question_types = infer_question_types(question)
     answer_type = "+".join(question_types)
     answer_label = question_label(question)
+    resolved = resolve_drug_query(drug_query)
 
     evidences = retrieve(drug_query, question, limit=5)
     auto_synced = False
     sync_message = ""
 
     if not evidences and auto_sync:
-        resolved = resolve_drug_query(drug_query)
         if _can_auto_sync(resolved):
             try:
                 sync_result = sync_openfda(resolved, limit=8)
@@ -563,10 +638,8 @@ def answer_medication_question(
         detail = f"\n{sync_message}" if sync_message else ""
         return QAResult(
             answer=(
-                f"你問的是：{answer_label}。\n\n"
-                f"目前找到的 FDA 或 Kaggle 資料，沒有足夠內容回答「{question}」。\n"
-                "這不代表藥物沒有相關風險，只代表目前沒有可核對的來源。"
-                "請查看自己的藥袋，或直接詢問醫師、藥師。"
+                f"目前沒有足夠內容回答「{question}」，所以我不會隨便猜。\n\n"
+                "請先查看藥袋，或直接詢問醫師、藥師，會比較安全。"
                 f"{detail}"
             ),
             evidence=[],
@@ -576,14 +649,23 @@ def answer_medication_question(
             sync_message=sync_message,
             quality_status="insufficient_evidence",
             quality_message="資料不足，Agent 已停止推測並改為請使用者詢問醫師或藥師。",
+            quality_score=0,
+            quality_checks=[
+                {
+                    "code": "evidence",
+                    "label": "每個重點都有資料來源",
+                    "passed": False,
+                    "critical": True,
+                }
+            ],
+            resolved_drug_name=resolved,
+            agent_summary="已辨識問題，但沒有找到足夠且可核對的資料，因此不自行推測。",
         )
 
-    blocks: list[str] = []
+    claims: list[AnswerClaim] = []
     evidence_payload: list[dict] = []
     translated_any = False
-    translation_failed = False
     seen_sections: set[str] = set()
-    answer_contents: list[str] = []
 
     for item in evidences:
         if item.section_name in seen_sections:
@@ -598,18 +680,23 @@ def answer_medication_question(
         if language.lower().startswith("zh"):
             display_text, translated = _translate_to_zh(source_text)
             translated_any = translated_any or translated
-            translation_failed = translation_failed or (
-                _has_english_words(source_text) and not translated
-            )
             display_text = _focused_excerpt(display_text)
         else:
             display_text = _focused_excerpt(display_text)
 
-        prefix = PLAIN_PREFIX.get(item.section_name, f"{section_label(item.section_name)}：")
-        blocks.append(f"【{section_label(item.section_name)}】\n{prefix}{display_text}")
-        answer_contents.append(display_text)
-
         doc = item.document
+        claims.append(
+            AnswerClaim(
+                section=item.section_name,
+                display_text=display_text,
+                source_text=source_text,
+                evidence_id=doc.id,
+                brand_name=doc.brand_name,
+                generic_name=doc.generic_name,
+                product_ndc=doc.product_ndc,
+                source_id=doc.source_id,
+            )
+        )
         evidence_payload.append(
             {
                 "id": doc.id,
@@ -626,29 +713,71 @@ def answer_medication_question(
             }
         )
 
+    report = validate_answer(
+        drug_query=drug_query,
+        resolved_name=resolved,
+        question=question,
+        language=language,
+        claims=claims,
+    )
+    revision_count = 0
+    if not report.passed and claims:
+        revised_claims = [
+            replace(
+                claim,
+                display_text=_focused_excerpt(
+                    claim.display_text,
+                    max_chars=220,
+                    max_sentences=1,
+                ),
+            )
+            for claim in claims
+        ]
+        revised_report = validate_answer(
+            drug_query=drug_query,
+            resolved_name=resolved,
+            question=question,
+            language=language,
+            claims=revised_claims,
+        )
+        if revised_report.score > report.score:
+            claims = revised_claims
+            report = revised_report
+            revision_count = 1
+
+    blocks = [claim.display_text.strip() for claim in claims if claim.display_text.strip()]
+
     next_steps = []
     for item in question_types:
         guidance = NEXT_STEPS.get(item, NEXT_STEPS["general"])
         if guidance not in next_steps:
             next_steps.append(guidance)
     guidance_text = "\n".join(next_steps)
-    answer = (
-        f"藥物：{drug_query}\n\n"
-        + "\n\n".join(blocks)
-        + f"\n\n【請注意】\n{guidance_text}"
-    )
-    quality_status, quality_message = _review_answer(
-        question_types=question_types,
-        used_sections=seen_sections,
-        content_text=" ".join(answer_contents),
-        evidence_count=len(evidence_payload),
-        language=language,
-    )
-    if quality_status == "blocked":
+    answer = "\n\n".join(blocks) + f"\n\n提醒你：{guidance_text}"
+    if report.passed and language.lower().startswith("zh") and model_ready():
+        try:
+            natural_answer = naturalize_medication_answer(
+                drug_name=drug_query,
+                question=question,
+                facts=" ".join(blocks),
+                safety_note=guidance_text,
+            )
+            natural_answer = _simplify_chinese(natural_answer)
+            if _generated_answer_is_grounded(
+                natural_answer,
+                trusted_text=" ".join(blocks + [guidance_text]),
+            ):
+                answer = natural_answer
+            else:
+                revision_count += 1
+                logger.warning("MiniCPM5-2B rewrite rejected by grounding guardrail")
+        except LocalModelError as exc:
+            logger.warning("MiniCPM5-2B answer rewrite unavailable: %s", exc)
+    quality_status = "passed" if report.passed else "blocked"
+    if not report.passed:
         answer = (
-            f"藥物：{drug_query}\n\n"
-            "Agent 檢查後發現本次回答可能不夠精準，因此沒有直接顯示。\n"
-            "請換一個更明確的問題，或帶著藥袋詢問醫師、藥師。"
+            "這次找到的內容和你的問題不夠吻合，我先不顯示，避免讓你誤會。\n\n"
+            "請換一個更明確的問法，或帶著藥袋詢問醫師、藥師。"
         )
     return QAResult(
         answer=answer,
@@ -659,5 +788,12 @@ def answer_medication_question(
         auto_synced=auto_synced,
         sync_message=sync_message,
         quality_status=quality_status,
-        quality_message=quality_message,
+        quality_message=report.summary,
+        quality_score=report.score,
+        quality_checks=[item.as_dict() for item in report.checks],
+        revision_count=revision_count,
+        resolved_drug_name=resolved,
+        agent_summary=(
+            f"我已找出和「{answer_label}」最相關的內容，並完成來源與安全檢查。"
+        ),
     )

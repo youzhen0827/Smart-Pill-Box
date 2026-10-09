@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import re
+import zipfile
 from dataclasses import dataclass
 from typing import Any, Iterable
 from urllib.parse import urlparse
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 # 不會自動建立合成或示範藥物資料。
 OPENFDA_NDC_URL = "https://api.fda.gov/drug/ndc.json"
 OPENFDA_LABEL_URL = "https://api.fda.gov/drug/label.json"
+TFDA_ACTIVE_LICENSE_URL = "https://data.fda.gov.tw/data/opendata/export/37/json"
+TFDA_DATASET_PAGE_URL = "https://data.gov.tw/dataset/9123"
 
 
 class DatasetServiceError(RuntimeError):
@@ -35,6 +38,7 @@ class SyncResult:
     updated: int = 0
     ndc_results: int = 0
     label_results: int = 0
+    tfda_results: int = 0
     skipped: int = 0
 
     @property
@@ -300,6 +304,161 @@ def sync_openfda(term: str, *, limit: int = 10) -> SyncResult:
         logger.exception("Unexpected openFDA sync error")
         _finish_run(run, state="failed", result=result, message=str(exc))
         raise DatasetServiceError(f"同步 openFDA 時發生錯誤：{exc}") from exc
+
+
+def _download_tfda_archive() -> bytes:
+    try:
+        response = requests.get(
+            TFDA_ACTIVE_LICENSE_URL,
+            timeout=getattr(settings, "TFDA_TIMEOUT", 90),
+            headers={
+                "User-Agent": "SmartMedicineBoxResearch/1.2 (+TFDA open data sync)",
+                "Accept": "application/zip,application/json",
+            },
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise DatasetServiceError(f"無法連線台灣食藥署開放資料：{exc}") from exc
+    if not response.content:
+        raise DatasetServiceError("台灣食藥署回傳空資料。")
+    if len(response.content) > 30 * 1024 * 1024:
+        raise DatasetServiceError("台灣食藥署壓縮檔超過 30 MB，為避免記憶體不足已停止匯入。")
+    return response.content
+
+
+def _parse_tfda_records(raw: bytes) -> list[dict[str, Any]]:
+    try:
+        if zipfile.is_zipfile(io.BytesIO(raw)):
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                json_names = [name for name in archive.namelist() if name.lower().endswith(".json")]
+                if not json_names:
+                    raise DatasetServiceError("台灣食藥署壓縮檔中沒有 JSON。")
+                payload = json.loads(archive.read(json_names[0]).decode("utf-8-sig"))
+        else:
+            payload = json.loads(raw.decode("utf-8-sig"))
+    except DatasetServiceError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        raise DatasetServiceError("台灣食藥署資料格式無法解析。") from exc
+    if not isinstance(payload, list):
+        raise DatasetServiceError("台灣食藥署 JSON 不是資料陣列。")
+    records = [item for item in payload if isinstance(item, dict)]
+    if not records:
+        raise DatasetServiceError("台灣食藥署資料中沒有有效紀錄。")
+    if len(records) > 60_000:
+        raise DatasetServiceError("台灣食藥署資料超過 60,000 筆安全上限。")
+    return records
+
+
+def sync_tfda_active_licenses(*, archive_bytes: bytes | None = None) -> SyncResult:
+    """匯入 TFDA 未註銷藥品許可證，保留繁體中文適應症與用法用量。"""
+
+    run = DatasetSyncRun.objects.create(source="tfda", query="未註銷藥品許可證")
+    result = SyncResult()
+    try:
+        records = _parse_tfda_records(archive_bytes or _download_tfda_archive())
+        normalized: dict[str, dict[str, Any]] = {}
+        for record in records:
+            permit = _text(record.get("許可證字號"))
+            brand_name = _text(record.get("中文品名"))
+            generic_name = _text(record.get("英文品名"))
+            indications = _text(record.get("適應症"))
+            dosage = _text(record.get("用法用量"))
+            if not permit or not (brand_name or generic_name):
+                result.skipped += 1
+                continue
+            normalized[permit[:180]] = {
+                "record": record,
+                "brand_name": brand_name[:250],
+                "generic_name": generic_name[:250],
+                "manufacturer": (
+                    _text(record.get("製造商名稱")) or _text(record.get("申請商名稱"))
+                )[:250],
+                "dosage_form": _text(record.get("劑型"))[:180],
+                "indications": indications,
+                "dosage": dosage,
+            }
+        if not normalized:
+            raise DatasetServiceError("台灣食藥署資料沒有可匯入的藥品。")
+
+        existing_ids = set(
+            DrugKnowledgeDocument.objects.filter(
+                source_type="tfda_license", source_id__in=normalized.keys()
+            ).values_list("source_id", flat=True)
+        )
+        now = timezone.now()
+        documents = []
+        for source_id, item in normalized.items():
+            record = item["record"]
+            documents.append(
+                DrugKnowledgeDocument(
+                    source_type="tfda_license",
+                    source_id=source_id,
+                    product_ndc="",
+                    brand_name=item["brand_name"],
+                    generic_name=item["generic_name"],
+                    manufacturer=item["manufacturer"],
+                    route="",
+                    dosage_form=item["dosage_form"],
+                    purpose="",
+                    indications=item["indications"],
+                    adverse_reactions="",
+                    warnings="",
+                    drug_interactions="",
+                    raw_json={
+                        "dataset_url": TFDA_DATASET_PAGE_URL,
+                        "dosage_and_administration": item["dosage"],
+                        "active_ingredients": _text(record.get("主成分略述")),
+                        "data": record,
+                    },
+                    source_url=TFDA_DATASET_PAGE_URL,
+                    retrieved_at=now,
+                )
+            )
+        update_fields = [
+            "product_ndc",
+            "brand_name",
+            "generic_name",
+            "manufacturer",
+            "route",
+            "dosage_form",
+            "purpose",
+            "indications",
+            "adverse_reactions",
+            "warnings",
+            "drug_interactions",
+            "raw_json",
+            "source_url",
+            "retrieved_at",
+        ]
+        with transaction.atomic():
+            DrugKnowledgeDocument.objects.bulk_create(
+                documents,
+                batch_size=100,
+                update_conflicts=True,
+                update_fields=update_fields,
+                unique_fields=["source_type", "source_id"],
+            )
+        result.tfda_results = len(documents)
+        result.added = len(normalized.keys() - existing_ids)
+        result.updated = len(documents) - result.added
+        _finish_run(
+            run,
+            state="success",
+            result=result,
+            message=(
+                f"台灣食藥署未註銷藥品許可證 {result.tfda_results} 筆；"
+                f"略過 {result.skipped} 筆"
+            ),
+        )
+        return result
+    except DatasetServiceError as exc:
+        _finish_run(run, state="failed", result=result, message=str(exc))
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected TFDA sync error")
+        _finish_run(run, state="failed", result=result, message=str(exc))
+        raise DatasetServiceError(f"同步台灣食藥署資料時發生錯誤：{exc}") from exc
 
 
 def _column_key(name: str) -> str:

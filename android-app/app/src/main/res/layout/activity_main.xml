@@ -66,7 +66,7 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <!-- 今日提醒 -->
+            <!-- 服藥狀況 -->
             <LinearLayout
                 android:id="@+id/tabToday"
                 android:layout_width="match_parent"
@@ -123,15 +123,7 @@
 
                     <TextView
                         style="@style/SectionTitle"
-                        android:text="💊 今日早／中／晚任務狀態" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="顏色依 Django API 的今日提醒狀態顯示；實體開盒事件依早／中／晚三格回傳。"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
+                        android:text="💊 服藥狀況：今天早／中／晚" />
 
                     <GridLayout
                         android:layout_width="match_parent"
@@ -182,7 +174,7 @@
                     android:paddingStart="4dp"
                     android:paddingTop="3dp"
                     android:paddingEnd="4dp"
-                    android:text="請先在連線設定填入長輩姓名與 API 網址。"
+                    android:text="請先在手機姓名設定填入長輩姓名與 API 網址。"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
 
@@ -196,7 +188,7 @@
                     android:paddingBottom="10dp" />
             </LinearLayout>
 
-            <!-- 新增提醒 -->
+            <!-- 臨時服藥 -->
             <ScrollView
                 android:id="@+id/tabAdd"
                 android:layout_width="match_parent"
@@ -209,21 +201,18 @@
                     android:orientation="vertical"
                     android:padding="14dp">
 
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:layout_marginBottom="8dp"
+                        android:text="臨時服藥" />
+
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/card_background"
                         android:orientation="vertical">
 
-                        <TextView style="@style/SectionTitle" android:text="➕ 新增臨時服藥" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:text="臨時服藥只執行一次；長期重複用藥請建立固定排程。"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="15sp" />
+                        <TextView style="@style/SectionTitle" android:text="➕ 新增一次性服藥任務" />
 
                         <EditText
                             android:id="@+id/editAddUserName"
@@ -336,7 +325,7 @@
                 </LinearLayout>
             </ScrollView>
 
-            <!-- 固定排程 -->
+            <!-- 吃藥時間 -->
             <ScrollView
                 android:id="@+id/tabSchedule"
                 android:layout_width="match_parent"
@@ -355,15 +344,7 @@
                         android:background="@drawable/card_background"
                         android:orientation="vertical">
 
-                        <TextView style="@style/SectionTitle" android:text="固定服藥排程" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:text="適合每天或每週重複服藥。資料會保存在 Django，關閉 App 後仍會保留。"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="15sp" />
+                        <TextView style="@style/SectionTitle" android:text="吃藥時間" />
 
                         <EditText
                             android:id="@+id/editScheduleUserName"
@@ -438,12 +419,12 @@
                         <Button
                             android:id="@+id/btnSaveSchedule"
                             style="@style/PrimaryButton"
-                            android:text="儲存固定排程" />
+                            android:text="儲存吃藥時間" />
 
                         <Button
                             android:id="@+id/btnClearSchedule"
                             style="@style/SecondaryButton"
-                            android:text="改新增排程" />
+                            android:text="改新增吃藥時間" />
 
                         <Button
                             android:id="@+id/btnReloadSchedules"
@@ -470,7 +451,7 @@
                 </LinearLayout>
             </ScrollView>
 
-            <!-- AI Agent 追蹤 -->
+            <!-- 提醒追蹤 -->
             <LinearLayout
                 android:id="@+id/tabAgent"
                 android:layout_width="match_parent"
@@ -484,15 +465,7 @@
                     android:background="@drawable/card_background"
                     android:orientation="vertical">
 
-                    <TextView style="@style/SectionTitle" android:text="AI Agent 追蹤" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:text="只列出等待開盒、已再次提醒或需要照護者確認的任務。"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="17sp" />
+                    <TextView style="@style/SectionTitle" android:text="提醒追蹤" />
 
                     <TextView
                         android:id="@+id/tvAgentStatus"
@@ -515,7 +488,7 @@
                     android:paddingBottom="10dp" />
             </LinearLayout>
 
-            <!-- 語音衛教 -->
+            <!-- 語音問藥 -->
             <ScrollView
                 android:id="@+id/tabQa"
                 android:layout_width="match_parent"
@@ -534,15 +507,7 @@
                         android:background="@drawable/card_background"
                         android:orientation="vertical">
 
-                        <TextView style="@style/SectionTitle" android:text="🎙️ 語音衛教" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:text="語音衛教由 APP 獨立完成：直接查詢 FDA 公開藥品資料，並在手機內翻成易懂中文。網頁連線只用於排程同步。"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="15sp" />
+                        <TextView style="@style/SectionTitle" android:text="🎙️ 語音問藥" />
 
                         <EditText
                             android:id="@+id/editQaDrug"
@@ -621,7 +586,7 @@
                         android:background="@drawable/card_background"
                         android:orientation="vertical">
 
-                        <TextView style="@style/SectionTitle" android:text="依問題整理的 Agent 回答" />
+                        <TextView style="@style/SectionTitle" android:text="AI Agent 回答" />
 
                         <TextView
                             android:id="@+id/tvQaAnswer"
@@ -649,7 +614,47 @@
                 </LinearLayout>
             </ScrollView>
 
-            <!-- 連線設定 -->
+            <!-- 藥物資料 -->
+            <ScrollView
+                android:id="@+id/tabDataset"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/SectionTitle" android:text="藥物資料" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="可查內容：藥物用途、服用方法、副作用、交互作用與注意事項。"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="請到「語音問藥」輸入藥名與問題；回答下方會列出本次採用的資料來源。"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </ScrollView>
+
+            <!-- 手機姓名設定 -->
             <ScrollView
                 android:id="@+id/tabSettings"
                 android:layout_width="match_parent"
@@ -668,13 +673,24 @@
                         android:background="@drawable/card_background"
                         android:orientation="vertical">
 
-                        <TextView style="@style/SectionTitle" android:text="☁️ Django API 連線設定" />
+                        <TextView style="@style/SectionTitle" android:text="手機姓名設定" />
+
+                        <EditText
+                            android:id="@+id/editDefaultUser"
+                            style="@style/FormInput"
+                            android:hint="預設長輩姓名"
+                            android:inputType="textPersonName" />
+
+                        <TextView
+                            style="@style/SectionTitle"
+                            android:layout_marginTop="16dp"
+                            android:text="排程同步設定" />
 
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="5dp"
-                            android:text="Android 模擬器使用 10.0.2.2；實體手機需填入執行 Django 電腦的區域網路 IP。"
+                            android:text="模擬器使用 10.0.2.2；實體手機需填入執行 Django 電腦的區域網路 IP。"
                             android:textColor="@color/text_secondary"
                             android:textSize="15sp" />
 
@@ -689,12 +705,6 @@
                             style="@style/FormInput"
                             android:hint="DEVICE_API_TOKEN"
                             android:inputType="textPassword" />
-
-                        <EditText
-                            android:id="@+id/editDefaultUser"
-                            style="@style/FormInput"
-                            android:hint="預設長輩姓名"
-                            android:inputType="textPersonName" />
 
                         <EditText
                             android:id="@+id/editDefaultDevice"

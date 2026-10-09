@@ -26,10 +26,14 @@ x-django-environment: &django-environment
   EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
   DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-智慧藥盒 <no-reply@localhost>}
   AGENT_POLL_SECONDS: ${AGENT_POLL_SECONDS:-15}
+  AGENT_LLM_BACKEND: ${AGENT_LLM_BACKEND:-litert_lm}
+  AGENT_MODEL_PATH: ${AGENT_MODEL_DOCKER_PATH:-/models/MiniCPM5-2B_int4.litertlm}
+  AGENT_MODEL_CACHE_DIR: ${AGENT_MODEL_CACHE_DOCKER_DIR:-/models/cache}
   AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-}
-  AGENT_LLM_MODEL: ${AGENT_LLM_MODEL:-}
+  AGENT_LLM_MODEL: ${AGENT_LLM_MODEL:-MiniCPM5-2B}
   AGENT_LLM_API_KEY: ${AGENT_LLM_API_KEY:-}
-  AGENT_LLM_TIMEOUT: ${AGENT_LLM_TIMEOUT:-12}
+  AGENT_LLM_TIMEOUT: ${AGENT_LLM_TIMEOUT:-120}
+  AGENT_LLM_MIN_CONFIDENCE: ${AGENT_LLM_MIN_CONFIDENCE:-0.65}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
@@ -94,9 +98,11 @@ services:
       sh -c "python manage.py collectstatic --noinput &&
              exec gunicorn medicine_box.wsgi:application
              --bind 0.0.0.0:8000
-             --workers 3
-             --timeout 90
+             --workers 1
+             --timeout 180
              --access-logfile -"
+    volumes:
+      - ../models:/models
     ports:
       - "${WEB_PORT:-8000}:8000"
     depends_on:
@@ -124,6 +130,8 @@ services:
     restart: unless-stopped
     environment: *django-environment
     command: ["python", "manage.py", "run_medication_agent", "--interval", "15"]
+    volumes:
+      - ../models:/models
     depends_on:
       db:
         condition: service_healthy

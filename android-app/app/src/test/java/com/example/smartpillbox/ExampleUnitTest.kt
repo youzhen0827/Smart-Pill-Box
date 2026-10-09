@@ -7,7 +7,7 @@ import org.junit.Test
 
 class ExampleUnitTest {
     @Test
-    fun defaultApiUrlIsNormalizedForVersionSixBackend() {
+    fun defaultApiUrlIsNormalizedForVersionSevenBackend() {
         assertEquals(
             "http://10.0.2.2:8000/api/v1/",
             ApiClient.normalizeApiBase("10.0.2.2:8000/api/v1")
@@ -81,6 +81,7 @@ class ExampleUnitTest {
             "用於治療第 2 型糖尿病"
         )
         assertTrue(passed.passed)
+        assertEquals(100, passed.score)
 
         val blocked = MedicationEducationLogic.reviewAnswer(
             EducationQuestionKind.INTERACTIONS,
@@ -89,6 +90,63 @@ class ExampleUnitTest {
             "Nausea"
         )
         assertFalse(blocked.passed)
+    }
+
+    @Test
+    fun tfdaIdentityMatcherRejectsAnotherDrug() {
+        val record = TfdaDrugRecord(
+            permitNumber = "衛部藥製字第000001號",
+            chineseName = "安心降壓錠",
+            englishName = "SAFEPRESS TABLETS",
+            indications = "高血壓。",
+            dosage = "依醫師指示使用。",
+            ingredients = "AMLODIPINE"
+        )
+        assertEquals(100, TfdaDrugMatcher.identityScore("安心降壓錠", record))
+        assertEquals(80, TfdaDrugMatcher.identityScore("amlodipine", record))
+        assertEquals(0, TfdaDrugMatcher.identityScore("metformin", record))
+    }
+
+    @Test
+    fun agentScoreDropsWhenDrugIdentityDoesNotMatch() {
+        val review = MedicationEducationLogic.reviewAnswer(
+            EducationQuestionKind.INDICATIONS,
+            "indications_and_usage",
+            "Treatment of high blood pressure",
+            "用於治療高血壓",
+            identityScore = 0
+        )
+        assertFalse(review.passed)
+        assertTrue(review.score < 100)
+    }
+
+    @Test
+    fun generatedAnswerRejectsAdvertisingHallucination() {
+        val source = "這顆藥用來幫助控制血糖。"
+        val hallucinated = "這是幾句大哥大廣告的簡述。這顆藥用來幫助控制血糖。"
+        assertFalse(
+            MedicationEducationLogic.isGeneratedAnswerSafe(
+                EducationQuestionKind.INDICATIONS,
+                source,
+                hallucinated
+            )
+        )
+        assertTrue(
+            MedicationEducationLogic.isGeneratedAnswerSafe(
+                EducationQuestionKind.INDICATIONS,
+                source,
+                "這顆藥用來幫助控制血糖。"
+            )
+        )
+    }
+
+    @Test
+    fun sourceCleanerRemovesAdvertisingSentence() {
+        val cleaned = MedicationEducationLogic.cleanSourceText(
+            "這顆藥用於控制血糖。大哥大廣告限時優惠。"
+        )
+        assertTrue(cleaned.contains("控制血糖"))
+        assertFalse(cleaned.contains("廣告"))
     }
 }
 

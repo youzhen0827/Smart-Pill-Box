@@ -1,4 +1,4 @@
-# smart_medicine_box_Django_re_1
+# 8_aiagent_smart_medicine_box_Django_re
 
 智慧藥盒 Django 雲端端，已整合：
 
@@ -17,7 +17,7 @@
 
 ```bat
 conda activate venv_312
-cd smart_medicine_box_Django_re_1
+cd django-web
 python -m pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
@@ -28,7 +28,7 @@ python manage.py runserver 0.0.0.0:8000
 
 ```bat
 conda activate venv_312
-cd smart_medicine_box_Django_re_1
+cd django-web
 python manage.py run_medication_agent
 ```
 
@@ -116,9 +116,19 @@ docker compose \
 
 ## 4. 真實資料集如何進入網站
 
-登入後開啟「FDA 資料集」。
+登入後開啟「藥物資料」。
 
-### A. openFDA 即時同步
+### A. 台灣食藥署未註銷藥品許可證
+
+第 8 版保留食藥署官方繁體中文資料，包含中文品名、英文品名、適應症、用法用量、劑型、主成分與許可證字號。網站可按「更新食藥署資料」，或執行：
+
+```bash
+python manage.py sync_tfda
+```
+
+資料來源：`https://data.gov.tw/dataset/9123`
+
+### B. openFDA 即時同步
 
 輸入英文學名、品牌名或 Product NDC，例如：
 
@@ -141,7 +151,7 @@ python manage.py sync_openfda --drug acetaminophen --drug metformin --limit 10
 
 openFDA API key 為選填；本專案不要求付費 key。
 
-### B. Kaggle 真實 CSV
+### C. Kaggle 真實 CSV
 
 1. 由 Kaggle 實際資料集頁面下載 CSV。
 2. 在網站填入該資料集頁面網址。
@@ -175,15 +185,15 @@ Drug 1 / Drug 2 / Interaction
 ## 5. 資料集在系統中的實際用途
 
 ```text
-真實 openFDA / Kaggle 文件
+真實 TFDA / openFDA / Kaggle 文件
           ↓
 DrugKnowledgeDocument（保留 source_id、source_url、raw_json）
           ↓
-RAG 依藥名 + 問題類型檢索相關區段
+AI Agent 判斷問題並依藥名檢索相關區段
           ↓
-只整理檢索證據；不補寫未出現在資料中的藥效或副作用
+產生精簡回答，再獨立檢查藥名、問題、來源、中文、長度與安全性
           ↓
-網站 / Android / Raspberry Pi 顯示或朗讀
+檢查通過才由網站 / Android / Raspberry Pi 顯示或朗讀
 ```
 
 網站每筆文件均可開啟詳細頁，核對原始來源、同步時間、NDC、製造商、RAG 欄位及原始 JSON／CSV 列。
@@ -210,9 +220,26 @@ Agent 循環：
   → 保存 AgentDecision 的理由與執行結果
 ```
 
-可在 `.env` 設定 `AGENT_LLM_BASE_URL` 與 `AGENT_LLM_MODEL` 使用 OpenAI 相容模型；留空時仍由本機安全規劃器依情境自主選擇工具。模型不能修改藥品、劑量或排程。
+第 8 版預設使用程式內的 `MiniCPM5-2B`，不需要安裝或啟動 Ollama。服藥到時、逾時、裝置離線或高風險狀況會讓模型從白名單工具中選擇提醒動作。模型必須提供信心與觀察依據；輸出不合格或無法使用時會自動回到安全規則。模型不能修改藥品、劑量或排程。
 
-Docker 的 `agent` 服務持續執行；本機開發也可手動執行一次：
+背景 Agent 每 15 秒檢查一次。服藥時間一到由 AI 選擇「到時提醒」，之後仍完全沿用每筆排程原有的「再次提醒分鐘」與「漏服判定分鐘」；模型失敗時安全規則會立即接手，不會因此漏發提醒。
+
+Windows 第一次使用：
+
+```powershell
+.\setup_minicpm.ps1
+python manage.py check_agent_model
+```
+
+之後用下列指令同時啟動網站與背景提醒 Agent：
+
+```powershell
+.\start_v8.ps1
+```
+
+模型會下載到上一層的 `models\MiniCPM5-2B_int4.litertlm`，之後可完全離線執行。Docker Compose 會掛載同一個模型檔。
+
+Docker 的 `agent` 服務會持續執行；本機開發也可手動執行一次：
 
 ```bash
 python manage.py run_medication_agent --once

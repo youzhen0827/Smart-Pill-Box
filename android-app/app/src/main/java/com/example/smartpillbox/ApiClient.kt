@@ -41,6 +41,14 @@ class ApiClient(baseUrl: String, private val token: String) {
 
     fun sendSensorEvent(payload: JSONObject): JSONObject = request("sensors/events/", "POST", payload)
 
+    fun interventions(userName: String, state: String = "created"): JSONObject {
+        val query = "user_name=${encode(userName)}&state=${encode(state)}"
+        return request("agent/interventions/?$query")
+    }
+
+    fun updateInterventionState(id: Int, state: String): JSONObject =
+        request("agent/interventions/$id/state/", "POST", JSONObject().put("state", state))
+
     fun webRoot(): String {
         val marker = "/api/v1/"
         return if (apiBase.contains(marker)) apiBase.substringBefore(marker) + "/" else apiBase

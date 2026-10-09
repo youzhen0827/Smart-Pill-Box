@@ -3,8 +3,7 @@
 {% block content %}
 <div class="max-w-3xl mx-auto px-4 py-8">
   <div class="card p-6 sm:p-8">
-    <h1 class="text-2xl font-black text-brand mb-2">{{ title }}</h1>
-    <p class="text-sm text-slate-500 mb-6">固定排程會依選定星期建立每日任務；藥盒時段維持早／中／晚三格。</p>
+    <h1 class="text-2xl font-black text-brand mb-6">{{ title }}</h1>
     <form method="post" class="grid sm:grid-cols-2 gap-5">
       {% csrf_token %}
       <div><div class="flex justify-between gap-2"><label class="block text-sm font-bold mb-1">{{ form.elder.label }}</label><a href="{% url 'elder_create' %}" class="text-xs text-brand underline">新增照護對象</a></div>{{ form.elder }}{% for error in form.elder.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}</div>
@@ -25,7 +24,7 @@
       </details>
       {% for error in form.non_field_errors %}<p class="sm:col-span-2 text-red-600 text-sm">{{ error }}</p>{% endfor %}
       <div class="sm:col-span-2 flex gap-3 pt-2">
-        <button class="bg-brand text-white font-bold px-6 py-3 rounded-xl">儲存排程</button>
+        <button class="bg-brand text-white font-bold px-6 py-3 rounded-xl">儲存吃藥時間</button>
         <a href="{% url 'schedules' %}" class="px-6 py-3 rounded-xl border">取消</a>
       </div>
     </form>

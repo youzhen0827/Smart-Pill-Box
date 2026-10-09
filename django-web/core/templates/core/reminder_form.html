@@ -4,12 +4,11 @@
 {% block content %}
 <div class="max-w-xl mx-auto px-4 sm:px-6 py-10">
   <div class="mb-6">
-    <a href="{% url 'dashboard' %}" class="text-sm text-brand font-semibold hover:underline">← 回監控中心</a>
+    <a href="{% url 'dashboard' %}" class="text-sm text-brand font-semibold hover:underline">← 回服藥狀況</a>
     <h1 class="text-2xl font-black text-brand mt-3">{{ title }}</h1>
   </div>
 
   <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-    <p class="text-sm text-slate-500 mb-5">臨時服藥只執行一次。建立後由系統追蹤，不能預先指定已服藥或漏服。</p>
     {% if not form.elder.field.queryset.exists %}
     <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 mb-4">尚未建立照護對象。請先<a href="{% url 'elder_create' %}" class="font-bold underline">新增照護對象</a>。</div>
     {% endif %}

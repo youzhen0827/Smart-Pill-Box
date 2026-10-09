@@ -1,20 +1,19 @@
 {% extends "core/base.html" %}
 {% block title %}智慧藥盒平台{% endblock %}
 {% block content %}
-<section class="tone-plum py-20 px-4">
+<section class="py-20 px-4" style="background-color: #DDEFD8;">
   <div class="max-w-4xl mx-auto text-center">
     <div class="text-6xl mb-5">💊</div>
-    <h1 class="text-3xl sm:text-5xl font-black mb-5">高齡友善主動式智慧藥盒與 AI 作息關懷 Agent</h1>
-    <p class="text-white/80 text-base sm:text-lg max-w-3xl mx-auto mb-8">先建立固定服藥排程，系統每天產生今日任務，再由 AI Agent 依提醒與藥盒事件追蹤結果。</p>
-    {% if user.is_authenticated %}<a href="{% url 'dashboard' %}" class="inline-block bg-white text-brand font-bold px-8 py-3 rounded-xl shadow-lg">進入監控中心 →</a>{% else %}<div class="flex gap-3 justify-center"><a href="{% url 'register' %}" class="bg-white text-brand font-bold px-8 py-3 rounded-xl">建立帳號</a><a href="{% url 'login' %}" class="border border-white/50 px-8 py-3 rounded-xl">登入</a></div>{% endif %}
+    <h1 class="text-3xl sm:text-5xl font-black text-brand-dark mb-5">高齡友善主動式智慧藥盒與 AI 作息關懷 Agent</h1>
+    <p class="text-brand-dark text-base sm:text-lg max-w-3xl mx-auto mb-8">先設定吃藥時間，系統每天建立服藥任務，再依提醒與藥盒事件追蹤結果。</p>
+    {% if user.is_authenticated %}<a href="{% url 'dashboard' %}" class="inline-block bg-brand text-white font-bold px-8 py-3 rounded-xl shadow-lg">查看服藥狀況 →</a>{% else %}<div class="flex gap-3 justify-center"><a href="{% url 'register' %}" class="bg-brand text-white font-bold px-8 py-3 rounded-xl">建立帳號</a><a href="{% url 'login' %}" class="border-2 border-brand text-brand font-bold px-8 py-3 rounded-xl">登入</a></div>{% endif %}
   </div>
 </section>
-<div class="grid grid-cols-5 h-3" aria-hidden="true"><div class="tone-mint"></div><div class="tone-blue"></div><div class="tone-aqua"></div><div class="tone-sage"></div><div class="tone-plum"></div></div>
 <section class="max-w-6xl mx-auto px-4 sm:px-6 py-14">
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-    <div class="card p-6"><div class="text-3xl mb-3">📅</div><h2 class="font-bold text-brand mb-2">服藥排程是規則</h2><p class="text-sm text-slate-500">設定照護對象、藥物、時間與執行星期，持續產生每日任務。</p></div>
-    <div class="card p-6"><div class="text-3xl mb-3">📡</div><h2 class="font-bold text-brand mb-2">今日任務是執行項目</h2><p class="text-sm text-slate-500">監控今天需要服用的藥物，以及服藥結果與確認依據。</p></div>
-    <div class="card p-6"><div class="text-3xl mb-3">🗣️</div><h2 class="font-bold text-brand mb-2">Agent 是追蹤過程</h2><p class="text-sm text-slate-500">說明等待開盒、再次提醒與需要照護者處理的原因；語音衛教維持獨立頁面。</p></div>
+    <div class="card p-6"><div class="text-3xl mb-3">📅</div><h2 class="font-bold text-brand mb-2">吃藥時間</h2><p class="text-sm text-slate-500">設定照護對象、藥物、時間與執行星期，持續產生每日任務。</p></div>
+    <div class="card p-6"><div class="text-3xl mb-3">📡</div><h2 class="font-bold text-brand mb-2">服藥狀況</h2><p class="text-sm text-slate-500">查看今天需要服用的藥物、服藥結果與確認依據。</p></div>
+    <div class="card p-6"><div class="text-3xl mb-3">🗣️</div><h2 class="font-bold text-brand mb-2">提醒追蹤與語音問藥</h2><p class="text-sm text-slate-500">查看等待開盒、再次提醒與需要處理的原因，也能用語音查詢藥物。</p></div>
   </div>
 </section>
 {% endblock %}

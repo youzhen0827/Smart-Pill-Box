@@ -105,7 +105,7 @@ class UserProfileForm(forms.ModelForm):
     class Meta:
         model = UserProfile
         fields = ["android_name"]
-        labels = {"android_name": "此帳號要接收的 Android 使用者姓名"}
+        labels = {"android_name": "此帳號要接收的手機使用者姓名"}
         widgets = {
             "android_name": forms.Textarea(
                 attrs={
@@ -122,7 +122,7 @@ class UserProfileForm(forms.ModelForm):
     def clean_android_name(self):
         value = self.cleaned_data.get("android_name", "").strip()
         if not value:
-            raise forms.ValidationError("請至少輸入一個 Android 使用者姓名。")
+            raise forms.ValidationError("請至少輸入一個手機使用者姓名。")
         return value
 
 class ElderForm(forms.ModelForm):

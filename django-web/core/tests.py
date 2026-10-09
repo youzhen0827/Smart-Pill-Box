@@ -3,8 +3,9 @@ from __future__ import annotations
 import io
 import json
 import re
+import zipfile
 from datetime import datetime, time, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -22,14 +23,21 @@ from core.models import (
     Elder,
     MedicationLog,
     MedicationSchedule,
+    PillBoxDevice,
     Reminder,
     SensorEvent,
     UserProfile,
 )
-from core.services.dataset_service import import_kaggle_csv, sync_openfda
-from core.services.medication_agent import run_agent_cycle
+from core.services.dataset_service import (
+    import_kaggle_csv,
+    sync_openfda,
+    sync_tfda_active_licenses,
+)
+from core.services.medication_agent import _device_health, run_agent_cycle
+from core.services.agent_planner import plan_agent_action
 from core.services.qa_agent import (
     _focused_excerpt,
+    _generated_answer_is_grounded,
     _simplify_chinese,
     _translate_with_automatic_service,
     answer_medication_question,
@@ -147,13 +155,14 @@ class ReminderApiTests(ApiTestMixin, TestCase):
         self.assertEqual(event.matched_reminder, reminder)
 
 
+@override_settings(AGENT_LLM_BASE_URL="", AGENT_LLM_MODEL="")
 class MedicationAgentTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="agent-owner", password="pass-12345")
         self.elder = Elder.objects.create(owner=self.user, name="王阿公", age=72)
         self.drug = Drug.objects.create(name_zh="測試排程藥物", generic_name="fixture-only")
 
-    def make_schedule(self, *, scheduled_time: time, grace=10, missed=60):
+    def make_schedule(self, *, scheduled_time: time, grace=10, missed=30):
         return MedicationSchedule.objects.create(
             elder=self.elder,
             drug=self.drug,
@@ -164,6 +173,40 @@ class MedicationAgentTests(TestCase):
             missed_after_minutes=missed,
             device_id="pillbox-01",
         )
+
+    def test_old_device_report_uses_readable_duration(self):
+        now = timezone.make_aware(datetime(2026, 10, 7, 3, 0))
+        PillBoxDevice.objects.create(
+            device_id="old-pillbox",
+            last_seen_at=now - timedelta(days=85),
+        )
+        reminder = Reminder(device_id="old-pillbox")
+
+        health, note, bucket = _device_health(reminder, now)
+
+        self.assertEqual(health, "offline")
+        self.assertEqual(note, "超過 7 天沒有回報")
+        self.assertEqual(bucket, "over_week")
+        self.assertNotIn("122", note)
+
+    def test_newer_sensor_event_wins_over_old_device_record(self):
+        now = timezone.make_aware(datetime(2026, 10, 7, 3, 0))
+        PillBoxDevice.objects.create(
+            device_id="mixed-pillbox",
+            last_seen_at=now - timedelta(days=85),
+        )
+        SensorEvent.objects.create(
+            device_id="mixed-pillbox",
+            event_type="heartbeat",
+            detected_at=now - timedelta(minutes=5),
+        )
+        reminder = Reminder(device_id="mixed-pillbox")
+
+        health, note, bucket = _device_health(reminder, now)
+
+        self.assertEqual(health, "online")
+        self.assertEqual(note, "5 分鐘前有回報")
+        self.assertEqual(bucket, "recent")
 
     def test_agent_intervenes_when_sensor_has_not_opened(self):
         now = timezone.make_aware(datetime(2026, 7, 10, 10, 20))
@@ -193,6 +236,7 @@ class MedicationAgentTests(TestCase):
         reminder.refresh_from_db()
         self.assertEqual(second.interventions_created, 0)
         self.assertEqual(reminder.reminder_count, 2)
+        self.assertEqual(second.unchanged_events_skipped, 1)
 
     def test_agent_marks_missed_after_threshold(self):
         now = timezone.make_aware(datetime(2026, 7, 10, 11, 10))
@@ -259,7 +303,130 @@ class MedicationAgentTests(TestCase):
         )
 
 
+@override_settings(
+    AGENT_LLM_BACKEND="openai",
+    AGENT_LLM_BASE_URL="http://127.0.0.1:11434/v1",
+    AGENT_LLM_MODEL="qwen3:4b",
+    AGENT_LLM_API_KEY="ollama",
+    AGENT_LLM_TIMEOUT=20,
+    AGENT_LLM_MIN_CONFIDENCE=0.65,
+)
+class AgentPlannerTests(TestCase):
+    def observation(self):
+        return {
+            "stage": "follow_up_window",
+            "minutes_late": 20,
+            "reminder_count": 1,
+            "prior_taken_30d": 12,
+            "prior_missed_30d": 0,
+            "device_health": "online",
+            "device_note": "1 分鐘前有回報",
+            "sensor_confirmed": False,
+            "risk_score": 15,
+            "risk_level": "low",
+        }
+
+    @patch("core.services.agent_planner.requests.post")
+    def test_ollama_tool_call_is_validated(self, post):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "send_followup_reminder",
+                                    "arguments": json.dumps(
+                                        {
+                                            "reason": "已逾时且仍没有开盒证据，先再次提醒本人。",
+                                            "confidence": 0.88,
+                                            "evidence_fields": ["minutes_late", "sensor_confirmed"],
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        post.return_value = response
+
+        plan = plan_agent_action(
+            observation=self.observation(),
+            required_tools=["send_initial_reminder"],
+            optional_tools=["send_followup_reminder", "escalate_caregiver"],
+        )
+
+        self.assertEqual(plan.planner, "llm")
+        self.assertEqual(plan.tools[-1], "send_followup_reminder")
+        self.assertEqual(plan.confidence, 0.88)
+        self.assertIn("逾時", plan.reasoning)
+        self.assertIn("minutes_late", plan.evidence_fields)
+        self.assertEqual(post.call_args.kwargs["json"]["tool_choice"], "required")
+
+    @patch("core.services.agent_planner.requests.post")
+    def test_low_confidence_model_output_falls_back_to_safe_policy(self, post):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "escalate_caregiver",
+                                    "arguments": {
+                                        "reason": "資料不足但仍通知照護者。",
+                                        "confidence": 0.3,
+                                        "evidence_fields": ["minutes_late"],
+                                    },
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        post.return_value = response
+
+        plan = plan_agent_action(
+            observation=self.observation(),
+            required_tools=["send_initial_reminder"],
+            optional_tools=["send_followup_reminder", "escalate_caregiver"],
+        )
+
+        self.assertEqual(plan.planner, "llm_fallback")
+        self.assertEqual(plan.tools[-1], "send_followup_reminder")
+
+
 class DatasetImportTests(TestCase):
+    def test_tfda_archive_adds_traditional_chinese_indications_and_dosage(self):
+        record = {
+            "許可證字號": "測試許可證000001",
+            "中文品名": "測試繁體藥品",
+            "英文品名": "TEST MEDICINE",
+            "適應症": "測試用途，不供實際服用。",
+            "用法用量": "依測試藥袋指示。",
+            "主成分略述": "TEST INGREDIENT",
+            "劑型": "錠劑",
+            "製造商名稱": "測試公司",
+        }
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
+            output.writestr("37.json", json.dumps([record], ensure_ascii=False).encode("utf-8"))
+        result = sync_tfda_active_licenses(archive_bytes=archive.getvalue())
+        self.assertEqual(result.added, 1)
+        document = DrugKnowledgeDocument.objects.get(source_type="tfda_license")
+        self.assertEqual(document.brand_name, "測試繁體藥品")
+        self.assertEqual(document.indications, "測試用途，不供實際服用。")
+        self.assertEqual(document.raw_json["dosage_and_administration"], "依測試藥袋指示。")
+        self.assertEqual(DatasetSyncRun.objects.get().source, "tfda")
+
     def test_numbered_side_effect_and_use_columns_are_supported(self):
         # 這是欄位解析測試資料，不會被載入正式資料庫或作為醫療內容。
         csv_bytes = (
@@ -344,6 +511,36 @@ class DatasetImportTests(TestCase):
 
 @override_settings(LIBRETRANSLATE_URL="")
 class QaAgentTests(TestCase):
+    def test_generated_answer_rejects_unrelated_advertising_sentence(self):
+        candidate = (
+            "這是幾句大哥大廣告的簡述。"
+            "這顆藥用來幫助控制血糖。"
+            "請以藥袋或醫師說明為準。"
+        )
+        trusted = "這顆藥用來幫助控制血糖。請以藥袋或醫師說明為準。"
+        self.assertFalse(_generated_answer_is_grounded(candidate, trusted))
+
+    def test_generated_answer_accepts_sentences_supported_by_source(self):
+        candidate = "這顆藥用來幫助控制血糖。請以藥袋或醫師說明為準。"
+        self.assertTrue(_generated_answer_is_grounded(candidate, candidate))
+
+    @patch("core.services.qa_agent.model_ready", return_value=True)
+    @patch(
+        "core.services.qa_agent.naturalize_medication_answer",
+        return_value="這是幾句大哥大廣告的簡述。這顆藥用來幫助控制血糖。",
+    )
+    def test_hallucinated_model_rewrite_uses_safe_fallback(self, _rewrite, _ready):
+        DrugKnowledgeDocument.objects.create(
+            source_type="tfda_active_license",
+            source_id="fixture-grounding-guardrail",
+            generic_name="安全測試藥",
+            indications="這顆藥用來幫助控制血糖。",
+            source_url="https://data.gov.tw/dataset/9123",
+        )
+        result = answer_medication_question("安全測試藥", "這顆藥有什麼用途？")
+        self.assertNotIn("大哥大", result.answer)
+        self.assertIn("控制血糖", result.answer)
+
     def test_answer_contains_only_retrieved_evidence_and_provenance(self):
         document = DrugKnowledgeDocument.objects.create(
             source_type="openfda_label",
@@ -363,6 +560,8 @@ class QaAgentTests(TestCase):
         self.assertIn("TEST FIXTURE ADVERSE TEXT", result.answer)
         self.assertEqual(result.evidence[0]["id"], document.id)
         self.assertEqual(result.evidence[0]["source_url"], document.source_url)
+        self.assertGreaterEqual(result.quality_score, 80)
+        self.assertTrue(result.quality_checks)
 
     def test_no_document_means_no_invented_medical_answer(self):
         result = answer_medication_question(
@@ -525,22 +724,23 @@ class WebPageTests(TestCase):
                 response = self.client.get(reverse(name))
                 self.assertEqual(response.status_code, 200)
 
-    def test_dataset_page_lists_real_source_workflow(self):
+    def test_dataset_page_lists_real_aiagent_sources(self):
         response = self.client.get(reverse("dataset_center"))
         self.assertContains(response, "openFDA")
         self.assertContains(response, "Kaggle")
-        self.assertContains(response, "資料集匯入")
+        self.assertContains(response, "台灣食藥署")
+        self.assertContains(response, "藥物資料")
 
     def test_navigation_keeps_seven_main_pages(self):
         response = self.client.get(reverse("dashboard"))
         for label in (
             "首頁",
-            "監控中心",
-            "服藥排程",
-            "AI Agent 追蹤",
-            "語音衛教",
-            "資料集匯入",
-            "Android 名字",
+            "服藥狀況",
+            "吃藥時間",
+            "提醒追蹤",
+            "語音問藥",
+            "藥物資料",
+            "手機姓名設定",
         ):
             self.assertContains(response, label)
 
@@ -583,14 +783,14 @@ class StrictThreeSlotLayoutTests(ApiTestMixin, TestCase):
         self.assertEqual([item["label"] for item in body["slots"]], ["早", "中", "晚"])
         self.assertEqual([item["slot"] for item in body["slots"]], [1, 2, 3])
         self.assertEqual(body["pillbox_layout"], "early-noon-evening-3-slot")
-        self.assertEqual(body["ui_revision"], 6)
+        self.assertEqual(body["ui_revision"], 8)
         self.assertTrue(body["time"].endswith("+08:00"))
 
     def test_dashboard_renders_only_three_slot_cards(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("dashboard"))
         html = response.content.decode("utf-8")
-        self.assertContains(response, "早／中／晚三格藥盒感測狀態")
+        self.assertContains(response, "早／中／晚藥盒感測狀態")
         self.assertContains(response, 'data-slot-count="3"')
         self.assertEqual(html.count('class="text-xs font-bold">早</div>'), 1)
         self.assertEqual(html.count('class="text-xs font-bold">中</div>'), 1)

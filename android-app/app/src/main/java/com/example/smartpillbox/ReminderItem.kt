@@ -8,7 +8,13 @@ data class AgentDecisionItem(
     val riskScore: Int,
     val riskLabel: String,
     val toolLabels: List<String>,
-    val reasoning: String
+    val reasoning: String,
+    val confidencePercent: Int,
+    val evidenceLabels: List<String>,
+    val validationSummary: String,
+    val situationSummary: String,
+    val nextStepSummary: String,
+    val notificationMessage: String
 )
 
 data class ReminderItem(
@@ -26,6 +32,8 @@ data class ReminderItem(
     val status: String,
     val agentState: String,
     val reminderCount: Int,
+    val graceMinutes: Int,
+    val missedAfterMinutes: Int,
     val takenAt: String?,
     val confirmationSource: String,
     val source: String,
@@ -47,6 +55,8 @@ data class ReminderItem(
             status = obj.optString("status", "已提醒"),
             agentState = obj.optString("agent_state", "pending"),
             reminderCount = obj.optInt("reminder_count"),
+            graceMinutes = obj.optInt("grace_minutes", 10).coerceAtLeast(1),
+            missedAfterMinutes = obj.optInt("missed_after_minutes", 30).coerceAtLeast(2),
             takenAt = obj.optString("taken_at").takeIf { it.isNotBlank() && it != "null" },
             confirmationSource = obj.optString("confirmation_source"),
             source = obj.optString("source"),
@@ -65,7 +75,20 @@ data class ReminderItem(
                             }
                         }
                     },
-                    reasoning = decision.optString("reasoning")
+                    reasoning = decision.optString("reasoning"),
+                    confidencePercent = decision.optInt("confidence_percent"),
+                    evidenceLabels = buildList {
+                        val evidence = decision.optJSONArray("evidence_labels")
+                        if (evidence != null) {
+                            for (index in 0 until evidence.length()) {
+                                evidence.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                            }
+                        }
+                    },
+                    validationSummary = decision.optString("validation_summary"),
+                    situationSummary = decision.optString("situation_summary"),
+                    nextStepSummary = decision.optString("next_step_summary"),
+                    notificationMessage = decision.optString("notification_message")
                 )
             }
         )

@@ -1,21 +1,29 @@
 {% extends "core/base.html" %}
-{% block title %}資料集匯入{% endblock %}
+{% block title %}藥物資料{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 py-7">
-  <div class="mb-6"><h1 class="text-2xl font-black text-brand">資料集匯入</h1><p class="text-sm text-slate-500 mt-1">可直接在 VSCode/Django 網站上傳 CSV，匯入推薦資料集或本機整理好的藥物資料。</p></div>
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"><div class="card p-4 text-center"><div class="text-3xl font-black text-brand">{{ counts.total }}</div><div class="text-xs text-slate-400">全部文件</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-cyan-700">{{ counts.ndc }}</div><div class="text-xs text-slate-400">FDA NDC</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-700">{{ counts.label }}</div><div class="text-xs text-slate-400">FDA Label</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-emerald-700">{{ counts.kaggle }}</div><div class="text-xs text-slate-400">Kaggle CSV</div></div></div>
+  <div class="mb-6"><h1 class="text-2xl font-black text-brand">藥物資料</h1></div>
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"><div class="card p-4 text-center"><div class="text-3xl font-black text-brand">{{ counts.total }}</div><div class="text-xs text-slate-400">全部文件</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-cyan-700">{{ counts.ndc }}</div><div class="text-xs text-slate-400">FDA NDC</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-indigo-700">{{ counts.label }}</div><div class="text-xs text-slate-400">FDA Label</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-emerald-700">{{ counts.kaggle }}</div><div class="text-xs text-slate-400">Kaggle CSV</div></div><div class="card p-4 text-center"><div class="text-3xl font-black text-rose-700">{{ counts.tfda }}</div><div class="text-xs text-slate-400">台灣食藥署</div></div></div>
   <section class="card p-5 mb-6">
-    <h2 class="font-bold text-brand">兩種匯入方式差別</h2>
-    <div class="grid md:grid-cols-2 gap-4 mt-3 text-sm">
+    <h2 class="font-bold text-brand">三種資料來源</h2>
+    <div class="grid md:grid-cols-3 gap-4 mt-3 text-sm">
+      <div class="rounded-xl border border-rose-100 bg-rose-50/70 p-4">
+        <div class="font-bold text-rose-800">1. 台灣食藥署</div>
+        <p class="text-slate-600 mt-1">繁體中文藥名、適應症、用法用量與主成分，適合長輩查詢台灣核准藥品。</p>
+      </div>
       <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
-        <div class="font-bold text-blue-800">1. FDA 官方 API 同步</div>
+        <div class="font-bold text-blue-800">2. FDA 官方 API</div>
         <p class="text-slate-600 mt-1">輸入單一英文藥名或 NDC，系統線上查 FDA NDC Directory 與 Drug Label。適合快速補一種藥的品牌、學名、製造商、警語與標示資料。</p>
       </div>
       <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
-        <div class="font-bold text-emerald-800">2. 匯入 CSV 資料集</div>
+        <div class="font-bold text-emerald-800">3. 匯入 CSV 資料集</div>
         <p class="text-slate-600 mt-1">上傳 Kaggle 或本機 CSV，一次匯入大量藥名、副作用、交互作用或適應症。適合建立 RAG 知識庫，不用一筆一筆查。</p>
       </div>
     </div>
+  </section>
+  <section class="card p-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div><h2 class="font-bold text-brand">台灣食藥署未註銷藥品許可證</h2><p class="text-sm text-slate-600 mt-1">官方資料每週更新；目前已匯入 {{ counts.tfda }} 筆。</p></div>
+    <form method="post">{% csrf_token %}<button name="sync_tfda" value="1" class="bg-rose-700 text-white px-5 py-3 rounded-xl font-bold">更新食藥署資料</button></form>
   </section>
   <section class="card p-5 mb-6">
     <h2 class="font-bold text-brand">可直接採用的真實 Kaggle 資料集</h2>

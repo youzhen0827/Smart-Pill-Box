@@ -1,6 +1,6 @@
-請用 Android Studio 開啟這個資料夾：v2.1_Android_6_workflow
+請用 Android Studio 開啟這個資料夾：v2.1_Android_8_aiagent
 
-這是「流程化介面與 Agent 問答版 v6」。
+這是第 8 版 Hybrid AI Agent；語音問藥仍可由 APP 獨立查詢。
 App 標題會顯示：💊 智慧藥盒管家
 感測器測試 Spinner 只會有：早、中、晚。
 
@@ -9,4 +9,4 @@ App 標題會顯示：💊 智慧藥盒管家
 Token：
   smartpill-dev-token
 
-「測試連線」會驗證 Django health API 是否為三格且 ui_revision=6。
+「測試連線」會驗證 Django health API 是否為三格且 ui_revision=8。

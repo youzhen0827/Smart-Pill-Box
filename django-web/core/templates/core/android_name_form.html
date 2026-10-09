@@ -1,15 +1,10 @@
 {% extends "core/base.html" %}
-{% block title %}設定 Android 使用者姓名名單 — 智慧藥盒平台{% endblock %}
+{% block title %}手機姓名設定 — 智慧藥盒平台{% endblock %}
 
 {% block content %}
 <div class="max-w-xl mx-auto px-4 sm:px-6 py-8">
   <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-    <h1 class="text-lg font-black text-brand mb-2">Android 名字</h1>
-    <p class="text-sm text-slate-500 mb-5 leading-relaxed">
-      Android App 不需要輸入 Django 登入帳號，只要輸入使用者姓名。
-      這裡用來設定「哪些 Android 使用者姓名」要歸到目前登入帳號。
-      可以填多個名字，例如：王阿公、媽媽、小明。
-    </p>
+    <h1 class="text-lg font-black text-brand mb-5">手機姓名設定</h1>
 
     <form method="post" class="space-y-4">
       {% csrf_token %}
@@ -40,7 +35,7 @@
         </button>
         <a href="{% url 'dashboard' %}"
            class="bg-slate-100 text-slate-600 text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-slate-200 transition">
-          返回監控中心
+          返回服藥狀況
         </a>
       </div>
     </form>

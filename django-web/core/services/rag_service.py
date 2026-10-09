@@ -108,7 +108,7 @@ def infer_sections(question: str) -> list[str]:
         elif question_type != "general":
             selected.append(question_type)
     if not selected:
-        return ["indications", "purpose", "adverse_reactions", "warnings"]
+        return ["purpose", "indications"]
     if "indications" in selected:
         selected.insert(0, "purpose")
     return list(dict.fromkeys(selected))
@@ -140,6 +140,7 @@ def _section_text(document: DrugKnowledgeDocument, section_name: str) -> str:
         "directions",
         "instructions_for_use",
         "patient_information",
+        "用法用量",
     )
     values: list[str] = []
     for source in sources:
@@ -160,9 +161,10 @@ def _document_candidates(drug_query: str):
         Q(generic_name__icontains=resolved)
         | Q(brand_name__icontains=resolved)
         | Q(product_ndc__icontains=resolved)
+        | Q(source_id__iexact=resolved)
     )
     if not candidates.exists():
-        pieces = [piece for piece in re.split(r"[,/()]", resolved) if piece.strip()]
+        pieces = [piece for piece in re.split(r"[,/()]", resolved) if len(piece.strip()) >= 3]
         query = Q()
         for piece in pieces[:4]:
             value = piece.strip()
@@ -193,7 +195,12 @@ def retrieve(drug_query: str, question: str, *, limit: int = 4) -> list[Retrieve
             section_tokens = _tokens(section_text)
             overlap = len(query_tokens & section_tokens)
             length_penalty = math.log10(max(len(section_text), 10)) * 0.15
-            source_bonus = 3.0 if doc.source_type == "openfda_label" else 1.0
+            source_bonus = {
+                "tfda_license": 4.0,
+                "openfda_label": 3.0,
+                "openfda_ndc": 2.0,
+                "kaggle_csv": 1.0,
+            }.get(doc.source_type, 0.0)
             score = exact_bonus + name_overlap + overlap * 1.6 + source_bonus - length_penalty
             evidence.append(
                 RetrievedEvidence(
