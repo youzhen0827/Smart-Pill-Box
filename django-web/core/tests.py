@@ -33,7 +33,11 @@ from core.services.dataset_service import (
     sync_openfda,
     sync_tfda_active_licenses,
 )
-from core.services.medication_agent import _device_health, run_agent_cycle
+from core.services.medication_agent import (
+    _contextual_reminder_message,
+    _device_health,
+    run_agent_cycle,
+)
 from core.services.agent_planner import plan_agent_action
 from core.services.qa_agent import (
     _focused_excerpt,
@@ -154,6 +158,60 @@ class ReminderApiTests(ApiTestMixin, TestCase):
         event = SensorEvent.objects.get(pk=response.json()["event_id"])
         self.assertEqual(event.matched_reminder, reminder)
 
+    def test_hardware_state_is_left_to_right_and_uses_usb(self):
+        now = timezone.make_aware(datetime(2026, 7, 10, 10, 0))
+        PillBoxDevice.objects.create(
+            owner=self.user,
+            device_id="pillbox-01",
+            last_seen_at=now,
+        )
+        Reminder.objects.create(
+            owner=self.user,
+            user_name="王阿公",
+            medicine_name="早藥",
+            scheduled_time="08:00 AM",
+            scheduled_datetime=now - timedelta(minutes=1),
+            slot=1,
+            device_id="pillbox-01",
+            status="已提醒",
+        )
+        Reminder.objects.create(
+            owner=self.user,
+            user_name="王阿公",
+            medicine_name="中藥",
+            scheduled_time="12:00 PM",
+            scheduled_datetime=now + timedelta(hours=2),
+            slot=2,
+            device_id="pillbox-01",
+            status="待提醒",
+        )
+        Reminder.objects.create(
+            owner=self.user,
+            user_name="王阿公",
+            medicine_name="晚藥",
+            scheduled_time="08:00 PM",
+            scheduled_datetime=now - timedelta(hours=2),
+            slot=3,
+            device_id="pillbox-01",
+            status="已服藥",
+        )
+
+        with patch("core.views.timezone.now", return_value=now):
+            response = self.client.get(
+                reverse("api_hardware_state"),
+                {"device_id": "pillbox-01", "user_name": "王阿公"},
+                HTTP_X_DEVICE_TOKEN=TOKEN,
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["online"])
+        self.assertEqual(payload["transport"], "usb_serial")
+        self.assertEqual(
+            [(item["slot"], item["label"], item["position"]) for item in payload["slots"]],
+            [(1, "早", "left"), (2, "中", "middle"), (3, "晚", "right")],
+        )
+        self.assertEqual([item["state"] for item in payload["slots"]], ["due", "scheduled", "taken"])
+
 
 @override_settings(AGENT_LLM_BASE_URL="", AGENT_LLM_MODEL="")
 class MedicationAgentTests(TestCase):
@@ -173,6 +231,73 @@ class MedicationAgentTests(TestCase):
             missed_after_minutes=missed,
             device_id="pillbox-01",
         )
+
+    @patch("core.services.medication_agent.generate_medication_reminder")
+    def test_trained_model_message_is_used_after_safety_validation(self, generate):
+        generate.return_value = (
+            "王阿公，現在是 10:00，該服用測試排程藥物 1 了。"
+            "慢慢來，服用後記得開啟藥盒確認。"
+        )
+        reminder = Reminder(
+            user_name="王阿公",
+            medicine_name="測試排程藥物",
+            dose_count="1",
+            reminder_hint="飯後服用",
+            slot=1,
+            scheduled_datetime=timezone.make_aware(datetime(2026, 7, 10, 10, 0)),
+        )
+        observation = {
+            "minutes_late": 0,
+            "reminder_count": 0,
+            "prior_missed_30d": 0,
+            "grace_minutes": 10,
+            "missed_after_minutes": 30,
+            "device_health": "online",
+            "device_note": "1 分鐘前有回報",
+            "risk_level": "low",
+        }
+
+        message, source = _contextual_reminder_message(
+            "send_initial_reminder",
+            reminder,
+            observation,
+            use_trained_model=True,
+        )
+
+        self.assertEqual(source, "trained_minicpm")
+        self.assertIn("慢慢來", message)
+
+    @patch("core.services.medication_agent.generate_medication_reminder")
+    def test_unsafe_model_message_uses_safe_fallback(self, generate):
+        generate.return_value = "王阿公，測試排程藥物請自行加倍補吃。"
+        reminder = Reminder(
+            user_name="王阿公",
+            medicine_name="測試排程藥物",
+            dose_count="1",
+            reminder_hint="飯後服用",
+            slot=1,
+            scheduled_datetime=timezone.make_aware(datetime(2026, 7, 10, 10, 0)),
+        )
+        observation = {
+            "minutes_late": 0,
+            "reminder_count": 0,
+            "prior_missed_30d": 0,
+            "grace_minutes": 10,
+            "missed_after_minutes": 30,
+            "device_health": "online",
+            "device_note": "1 分鐘前有回報",
+            "risk_level": "low",
+        }
+
+        message, source = _contextual_reminder_message(
+            "send_initial_reminder",
+            reminder,
+            observation,
+            use_trained_model=True,
+        )
+
+        self.assertEqual(source, "safe_fallback")
+        self.assertNotIn("加倍", message)
 
     def test_old_device_report_uses_readable_duration(self):
         now = timezone.make_aware(datetime(2026, 10, 7, 3, 0))
@@ -783,6 +908,8 @@ class StrictThreeSlotLayoutTests(ApiTestMixin, TestCase):
         self.assertEqual([item["label"] for item in body["slots"]], ["早", "中", "晚"])
         self.assertEqual([item["slot"] for item in body["slots"]], [1, 2, 3])
         self.assertEqual(body["pillbox_layout"], "early-noon-evening-3-slot")
+        self.assertEqual(body["physical_slot_order"], "left_to_right")
+        self.assertEqual(body["hardware_transport"], "usb_serial")
         self.assertEqual(body["ui_revision"], 8)
         self.assertTrue(body["time"].endswith("+08:00"))
 
@@ -820,3 +947,17 @@ class StrictThreeSlotLayoutTests(ApiTestMixin, TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("早=1、中=2、晚=3", response.json()["error"])
+
+    def test_pir_presence_event_does_not_require_a_slot(self):
+        response = self.api_post(
+            "api_sensor_event",
+            {
+                "device_id": "pillbox-01",
+                "user_name": "三格測試長輩",
+                "event_type": "presence_detected",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.json()["slot"])
+        self.assertEqual(response.json()["event_type"], "presence_detected")
+        self.assertIsNone(response.json()["matched_reminder"])

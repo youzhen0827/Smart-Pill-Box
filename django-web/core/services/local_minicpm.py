@@ -15,6 +15,7 @@ class LocalModelError(RuntimeError):
 
 _ENGINE = None
 _ENGINE_LOCK = threading.RLock()
+_MIN_TRAINED_MODEL_BYTES = 2_400_000_000
 
 
 def model_path() -> Path:
@@ -27,19 +28,39 @@ def runtime_available() -> bool:
 
 def model_ready() -> bool:
     path = model_path()
-    return runtime_available() and path.is_file() and path.stat().st_size > 1_000_000_000
+    return (
+        runtime_available()
+        and path.is_file()
+        and path.stat().st_size >= _MIN_TRAINED_MODEL_BYTES
+    )
 
 
 def model_status() -> dict[str, Any]:
     path = model_path()
     dependency = runtime_available()
-    exists = path.is_file() and path.stat().st_size > 1_000_000_000
+    exists = path.is_file() and path.stat().st_size >= _MIN_TRAINED_MODEL_BYTES
     return {
         "dependency": dependency,
         "model_exists": exists,
         "path": str(path),
+        "backend": settings.AGENT_LITERT_BACKEND,
         "available": dependency and exists,
     }
+
+
+def _configured_backend(litert_lm):
+    backend = settings.AGENT_LITERT_BACKEND
+    factories = {
+        "cpu": litert_lm.Backend.CPU,
+        "gpu": litert_lm.Backend.GPU,
+        "npu": litert_lm.Backend.NPU,
+    }
+    factory = factories.get(backend)
+    if factory is None:
+        raise LocalModelError(
+            f"不支援的 AGENT_LITERT_BACKEND：{backend}，請使用 cpu、gpu 或 npu"
+        )
+    return factory()
 
 
 def _engine():
@@ -64,7 +85,7 @@ def _engine():
                 pass
             _ENGINE = litert_lm.Engine(
                 str(model_path()),
-                backend=litert_lm.Backend.CPU(),
+                backend=_configured_backend(litert_lm),
                 max_num_tokens=4096,
                 cache_dir=str(cache_dir),
             )
@@ -149,6 +170,53 @@ def generate_json(*, system_message: str, payload: dict, schema: dict) -> dict:
         if start >= 0 and end >= start:
             return json.loads(text[start : end + 1])
         raise LocalModelError("MiniCPM5-2B 回傳內容不是有效 JSON") from exc
+
+
+def generate_medication_reminder(
+    *,
+    tool: str,
+    user_name: str,
+    medicine_name: str,
+    dose_count: str,
+    scheduled_time: str,
+    slot_name: str,
+    reminder_hint: str,
+    observation: dict,
+) -> str:
+    context = {
+        "提醒目的": tool,
+        "稱呼": user_name,
+        "藥物": medicine_name,
+        "原排程劑量": dose_count,
+        "原排程時間": scheduled_time,
+        "藥格": slot_name,
+        "服藥備註": reminder_hint,
+        "逾時分鐘": observation.get("minutes_late", 0),
+        "提醒次數": observation.get("reminder_count", 0),
+        "近30日漏服次數": observation.get("prior_missed_30d", 0),
+        "藥盒連線": observation.get("device_health", "unknown"),
+        "藥盒狀態說明": observation.get("device_note", ""),
+        "風險等級": observation.get("risk_level", "low"),
+        "再次提醒門檻": observation.get("grace_minutes", 10),
+        "漏服判定門檻": observation.get("missed_after_minutes", 30),
+    }
+    return generate_text(
+        system_message=(
+            "你是經過智慧藥盒提醒情境訓練的台灣繁體中文照護助理。"
+            "請依提供的真實狀態，寫出要直接顯示在手機通知上的一至兩個自然短句。"
+            "語氣要像熟悉長輩的照護者，溫和、清楚、不責備；逾時或高風險時可以更明確，"
+            "但不得恐嚇。只能使用輸入中的姓名、藥物、劑量、時間、裝置與紀錄，"
+            "不得新增疾病、療效、醫囑或數字，不得改藥、改量、改時間、要求停藥或補吃。"
+            "除非是『請勿自行改藥或改量』這類安全警語，否則不要提及改藥、停藥或加減量。"
+            "必須提到稱呼與藥物；到時提醒也必須保留原排程劑量。"
+            "不要輸出標題、引號、JSON、條列、模型說明、檢查分數或『根據資料』。"
+        ),
+        user_message=(
+            f"提醒情境：{json.dumps(context, ensure_ascii=False)}\n"
+            "請直接輸出這次通知文字。"
+        ),
+        max_output_tokens=128,
+    )
 
 
 def translate_medical_text(text: str) -> str:

@@ -6,3 +6,4 @@ gunicorn>=23,<24
 whitenoise>=6.9,<7.0
 opencc-python-reimplemented>=0.1.7,<0.2
 litert-lm==0.17.0
+pyserial>=3.5,<4.0

@@ -6,6 +6,12 @@ $agent = Start-Process `
     -WorkingDirectory $PSScriptRoot `
     -WindowStyle Hidden `
     -PassThru
+$bridge = Start-Process `
+    -FilePath $python `
+    -ArgumentList @("esp32_usb/serial_bridge.py") `
+    -WorkingDirectory $PSScriptRoot `
+    -WindowStyle Hidden `
+    -PassThru
 
 try {
     Set-Location $PSScriptRoot
@@ -13,5 +19,8 @@ try {
 } finally {
     if ($agent -and -not $agent.HasExited) {
         Stop-Process -Id $agent.Id
+    }
+    if ($bridge -and -not $bridge.HasExited) {
+        Stop-Process -Id $bridge.Id
     }
 }

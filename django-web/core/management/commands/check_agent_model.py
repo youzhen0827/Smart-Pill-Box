@@ -4,7 +4,7 @@ from core.services.agent_planner import agent_runtime_status
 
 
 class Command(BaseCommand):
-    help = "檢查第 8 版 Hybrid AI Agent 是否已準備好 MiniCPM5-2B 本機模型。"
+    help = "檢查第 8 版 Hybrid AI Agent 是否已準備好 MiniCPM5-2B 智慧藥盒訓練模型。"
 
     def handle(self, *args, **options):
         status = agent_runtime_status(probe=True, force=True)

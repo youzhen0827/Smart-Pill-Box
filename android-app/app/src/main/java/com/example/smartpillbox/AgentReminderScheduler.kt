@@ -25,21 +25,21 @@ internal object AgentReminderScheduler {
                 code = 1,
                 name = "due",
                 triggerAt = dueAt,
-                title = "AI Agent：現在該吃藥了",
+                title = "安全提醒：現在該吃藥了",
                 message = "${reminder.userName}，請服用 ${reminder.medicineName} ${reminder.doseCount}。${reminder.reminderHint}"
             ),
             AlarmStage(
                 code = 2,
                 name = "followup",
                 triggerAt = dueAt + reminder.graceMinutes * 60_000L,
-                title = "AI Agent：請確認是否已吃藥",
+                title = "安全提醒：請確認是否已吃藥",
                 message = "已超過服藥時間 ${reminder.graceMinutes} 分鐘，尚未確認服藥，請查看藥盒。"
             ),
             AlarmStage(
                 code = 3,
                 name = "missed",
                 triggerAt = dueAt + reminder.missedAfterMinutes * 60_000L,
-                title = "AI Agent：需要照護者確認",
+                title = "安全提醒：需要照護者確認",
                 message = "已超過服藥時間 ${reminder.missedAfterMinutes} 分鐘，請家人或照護者確認是否已服藥。"
             )
         )
@@ -64,6 +64,15 @@ internal object AgentReminderScheduler {
         val extras = Intent()
             .putExtra("reminder_id", reminder.id)
             .putExtra("user_name", reminder.userName)
+            .putExtra("medicine_name", reminder.medicineName)
+            .putExtra("dose_count", reminder.doseCount)
+            .putExtra("scheduled_time", reminder.scheduledTime)
+            .putExtra("reminder_hint", reminder.reminderHint)
+            .putExtra("minutes_late", when (stage.name) {
+                "followup" -> reminder.graceMinutes
+                "missed" -> reminder.missedAfterMinutes
+                else -> 0
+            })
             .putExtra("stage", stage.name)
             .putExtra("title", stage.title)
             .putExtra("message", stage.message)

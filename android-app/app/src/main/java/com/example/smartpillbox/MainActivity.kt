@@ -856,30 +856,42 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun testConnection() {
         saveSettings()
+        val userName = editDefaultUser.text.toString().trim()
+        val deviceId = editDefaultDevice.text.toString().trim().ifBlank { DEFAULT_DEVICE }
         tvSettingsStatus.text = "正在測試 Django API…"
         executeApi(
-            task = { apiClient().health() },
+            task = {
+                val client = apiClient()
+                client.health().put("_hardware", client.hardwareState(deviceId, userName))
+            },
             onSuccess = { response ->
                 val count = response.optInt("dataset_documents")
                 val service = response.optString("service", "smart-medicine-box")
                 val slotCount = response.optInt("slot_count", -1)
                 val slots = response.optJSONArray("slots")
                 val layout = response.optString("pillbox_layout")
+                val physicalOrder = response.optString("physical_slot_order")
+                val hardwareTransport = response.optString("hardware_transport")
                 val uiRevision = response.optInt("ui_revision", -1)
                 val agent = response.optJSONObject("agent")
                 if (!SlotLabels.healthContractIsThreeSlot(slotCount, slots)
                     || layout != "early-noon-evening-3-slot"
+                    || physicalOrder != "left_to_right"
+                    || hardwareTransport != "usb_serial"
                     || uiRevision != REQUIRED_UI_REVISION
                 ) {
-                    tvSettingsStatus.text = "後端版本不符：請確認網頁程式與 App 版本相符。"
+                    tvSettingsStatus.text = "後端版本不符：請使用 MiniCPM5-2B＋ESP32 USB 第 8 版 Django。"
                     tvHeaderConnection.text = "Django API：版本不符"
                     return@executeApi
                 }
                 val agentMessage = agent?.optString("message")
                     ?.takeIf { it.isNotBlank() }
                     ?: "未取得 Agent 狀態。"
-                tvSettingsStatus.text = "連線成功：$service；資料文件 $count 筆。\nHybrid AI Agent：$agentMessage"
-                tvHeaderConnection.text = "Django API：已連線"
+                val hardware = response.optJSONObject("_hardware")
+                val usbOnline = hardware?.optBoolean("online", false) == true
+                val usbText = if (usbOnline) "USB 藥盒已上線" else "USB 藥盒尚未上線"
+                tvSettingsStatus.text = "連線成功：$service；MiniCPM5-2B＋ESP32 USB 第 8 版；$usbText；資料文件 $count 筆。\nHybrid AI Agent：$agentMessage"
+                tvHeaderConnection.text = "Django API：已連線 · $usbText"
             },
             onError = { message ->
                 tvSettingsStatus.text = connectionMessage(message)
@@ -920,7 +932,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             tvQaStatus.text = buildString {
                                 append("${result.questionLabel}｜採用 1 筆可追溯資料")
                                 append("｜來源：${result.sourceName}")
-                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 手機內模型")
+                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 智慧藥盒訓練模型")
                                 if (result.fromCache) append("｜已儲存在手機")
                             }
                             speakLatestAnswer()
@@ -1173,7 +1185,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try {
             startActivityForResult(intent, REQUEST_SPEECH)
         } catch (_: Exception) {
-            tvQaStatus.text = "此裝置沒有可用的語音辨識服務；可直接打字，或使用 Raspberry Pi 的本機 faster-whisper。"
+            tvQaStatus.text = "此裝置沒有可用的語音辨識服務，請直接輸入文字。"
         }
     }
 

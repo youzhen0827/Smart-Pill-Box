@@ -44,7 +44,7 @@
           </div>
           {% endfor %}
         </div>
-        <p class="text-xs text-slate-400 mt-3">這裡只顯示 Raspberry Pi／裝置實際上報的最新事件；無資料時顯示「無事件」，不推測藥格是否有藥。</p>
+        <p class="text-xs text-slate-400 mt-3">這裡只顯示 ESP32 經 USB 實際上報的最新事件；無資料時顯示「無事件」，不推測藥格是否有藥。</p>
       </section>
       <section class="card p-5"><h2 class="font-bold text-brand mb-3">最近感測器事件</h2><div class="space-y-2 text-xs">{% for e in recent_events %}<div class="border-l-4 border-cyan-500 pl-3"><div class="font-semibold">{{ e.device_id }}｜{{ e.get_slot_display|default:"未指定" }}｜{{ e.get_event_type_display }}</div><div class="text-slate-400">{{ e.detected_at|date:"m-d H:i:s" }}｜任務 {{ e.matched_reminder_id|default:"未配對" }}</div></div>{% empty %}<p class="text-slate-400">尚無事件</p>{% endfor %}</div></section>
       <section class="card p-5"><h2 class="font-bold text-brand mb-3">最近 Agent 介入</h2><div class="space-y-2 text-xs">{% for i in interventions %}<div class="border-l-4 border-orange-400 pl-3"><div class="font-semibold">{{ i.get_intervention_type_display }}</div><div class="text-slate-500 line-clamp-2">{{ i.message }}</div></div>{% empty %}<p class="text-slate-400">尚無介入紀錄</p>{% endfor %}</div></section>

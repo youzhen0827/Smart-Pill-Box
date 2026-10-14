@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/v1/schedules/<int:schedule_id>/", views.api_schedule_detail, name="api_schedule_detail"),
     path("api/v1/schedules/<int:schedule_id>/delete/", views.api_schedule_delete, name="api_schedule_delete"),
     path("api/v1/sensors/events/", views.api_sensor_event, name="api_sensor_event"),
+    path("api/v1/hardware/state/", views.api_hardware_state, name="api_hardware_state"),
     path("api/v1/qa/ask/", views.api_qa_ask, name="api_qa_ask"),
     path("api/v1/agent/interventions/", views.api_interventions, name="api_interventions"),
     path(

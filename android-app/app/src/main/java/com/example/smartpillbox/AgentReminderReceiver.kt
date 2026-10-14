@@ -34,9 +34,15 @@ class AgentReminderReceiver : BroadcastReceiver() {
     private fun deliver(context: Context, intent: Intent) {
         val reminderId = intent.getIntExtra("reminder_id", 0)
         val userName = intent.getStringExtra("user_name").orEmpty()
+        val medicineName = intent.getStringExtra("medicine_name").orEmpty()
+        val doseCount = intent.getStringExtra("dose_count").orEmpty()
+        val scheduledTime = intent.getStringExtra("scheduled_time").orEmpty()
+        val reminderHint = intent.getStringExtra("reminder_hint").orEmpty()
+        val minutesLate = intent.getIntExtra("minutes_late", 0)
         val stage = intent.getStringExtra("stage").orEmpty()
         var title = intent.getStringExtra("title").orEmpty().ifBlank { "AI Agent 服藥提醒" }
         var message = intent.getStringExtra("message").orEmpty()
+        var trainedModelOutput = false
         var deliveredInterventionId = 0
         var apiClient: ApiClient? = null
 
@@ -54,10 +60,32 @@ class AgentReminderReceiver : BroadcastReceiver() {
                 }
                 val intervention = findIntervention(api.interventions(userName), reminderId, stage)
                 if (intervention != null) {
-                    title = titleForType(intervention.optString("type"))
+                    trainedModelOutput = intervention.optString("channel").contains("trained_minicpm")
+                    title = titleForType(
+                        intervention.optString("type"),
+                        trainedModelOutput
+                    )
                     message = intervention.optString("message", message)
                     deliveredInterventionId = intervention.optInt("id")
                 }
+            }
+        }
+        if (!trainedModelOutput && userName.isNotBlank() && medicineName.isNotBlank()) {
+            runCatching {
+                MiniCpmOnDeviceModel(context).use { model ->
+                    message = model.generateMedicationReminder(
+                        userName = userName,
+                        medicineName = medicineName,
+                        doseCount = doseCount.ifBlank { "1 粒" },
+                        scheduledTime = scheduledTime,
+                        reminderHint = reminderHint,
+                        stage = stage,
+                        minutesLate = minutesLate
+                    )
+                }
+                title = titleForType(typeForStage(stage), trainedModel = true)
+                trainedModelOutput = true
+                deliveredInterventionId = 0
             }
         }
         if (message.isNotBlank()) {
@@ -145,19 +173,29 @@ class AgentReminderReceiver : BroadcastReceiver() {
             return true
         }
 
-        internal fun titleForType(type: String): String = when (type) {
-            "initial_reminder" -> "AI Agent：現在該吃藥了"
-            "sensor_missing" -> "AI Agent：還沒偵測到開盒"
-            "device_check" -> "AI Agent：藥盒暫時沒有回報"
-            "caregiver_escalation" -> "AI Agent：請照護者協助確認"
-            "missed_escalation" -> "AI Agent：可能漏服，請確認"
-            else -> "AI Agent 服藥提醒"
+        internal fun titleForType(type: String, trainedModel: Boolean = false): String {
+            val prefix = if (trainedModel) "訓練 AI" else "安全提醒"
+            return when (type) {
+                "initial_reminder" -> "$prefix：現在該吃藥了"
+                "sensor_missing" -> "$prefix：還沒偵測到開盒"
+                "device_check" -> "$prefix：藥盒暫時沒有回報"
+                "caregiver_escalation" -> "$prefix：請照護者協助確認"
+                "missed_escalation" -> "$prefix：可能漏服，請確認"
+                else -> "$prefix：服藥提醒"
+            }
         }
 
         private fun stageCode(stage: String): Int = when (stage) {
             "due" -> 1
             "followup" -> 2
             else -> 3
+        }
+
+        private fun typeForStage(stage: String): String = when (stage) {
+            "due" -> "initial_reminder"
+            "followup" -> "sensor_missing"
+            "missed" -> "missed_escalation"
+            else -> ""
         }
 
         private fun taipeiDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {

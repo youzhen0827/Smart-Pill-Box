@@ -1,14 +1,15 @@
-# 修改摘要：Android Hybrid AI Agent v8
+# 修改摘要：Android MiniCPM5-2B＋ESP32 USB v8
 
 - APP 內建 25,944 筆台灣食藥署索引，可自行查詢繁體中文用途與用法，不依賴網頁。
 - 其他問藥內容由 APP 直接查 openFDA，連線到 Django 只用於排程同步。
 - 回答前會核對藥名、問題範圍、資料來源、中文、長度與用藥安全，並顯示檢查分數。
 - 加入手機內 MiniCPM5-2B，負責依資料整理長輩易懂的繁體中文回答；模型下載後不需 Ollama 或網頁。
+- 測試連線同時確認 Django MiniCPM5-2B Agent 與 ESP32 USB 藥盒狀態。
 - 加入背景 Agent 同步與系統通知；到時、再次提醒、漏服判定沿用原本每筆排程的分鐘設定。
 
 - 新增 AI Agent 追蹤分頁，只顯示等待開盒、再次提醒與需要確認的任務。
 - 語音衛教加入常見問題選單，回答依用途、副作用、服用方法、交互作用與警告分流。
-- 啟動時自動檢查 Django，並要求後端 `ui_revision=8`。
+- 啟動時自動檢查 Django，並要求後端 `ui_revision=8`、`hardware_transport=usb_serial`。
 - 使用五種參考色分開配置頁籤、統計與狀態，不使用漸層。
 
 - 首頁只有 3 格：早、中、晚。

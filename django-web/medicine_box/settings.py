@@ -120,16 +120,17 @@ AUTOMATIC_TRANSLATE_URL = os.getenv("AUTOMATIC_TRANSLATE_URL", "")
 AUTOMATIC_TRANSLATE_TIMEOUT = int(os.getenv("AUTOMATIC_TRANSLATE_TIMEOUT", "15"))
 AGENT_POLL_SECONDS = int(os.getenv("AGENT_POLL_SECONDS", "15"))
 AGENT_LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "litert_lm")
+AGENT_LITERT_BACKEND = os.getenv("AGENT_LITERT_BACKEND", "gpu").strip().lower()
 AGENT_MODEL_PATH = os.getenv(
     "AGENT_MODEL_PATH",
-    str(BASE_DIR.parent / "models" / "MiniCPM5-2B_int4.litertlm"),
+    str(BASE_DIR.parent / "models" / "MiniCPM5-2B_smartpill_trained_int8.litertlm"),
 )
 AGENT_MODEL_CACHE_DIR = os.getenv(
     "AGENT_MODEL_CACHE_DIR",
     str(BASE_DIR.parent / "models" / "cache"),
 )
 AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "")
-AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "MiniCPM5-2B")
+AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "MiniCPM5-2B-smartpill-trained")
 AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", "")
 AGENT_LLM_TIMEOUT = int(os.getenv("AGENT_LLM_TIMEOUT", "120"))
 AGENT_LLM_MIN_CONFIDENCE = float(os.getenv("AGENT_LLM_MIN_CONFIDENCE", "0.65"))

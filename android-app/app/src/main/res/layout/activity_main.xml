@@ -779,7 +779,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="5dp"
-                            android:text="目前尚未接硬體，可先用這裡模擬早／中／晚任一格開盒事件；未來 ESP32 或 Raspberry Pi 感測器會送出相同資料。"
+                            android:text="ESP32 透過照片中的 USB 線與電腦橋接器連接；這裡也能手動測試早／中／晚任一格開盒事件。"
                             android:textColor="@color/text_secondary"
                             android:textSize="15sp" />
 

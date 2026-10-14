@@ -129,7 +129,7 @@ def _headers() -> dict[str, str]:
 
 def _provider_label(base_url: str) -> str:
     if getattr(settings, "AGENT_LLM_BACKEND", "") == "litert_lm":
-        return "MiniCPM5-2B 程式內本機模型"
+        return "MiniCPM5-2B 智慧藥盒訓練模型"
     local_markers = ("127.0.0.1:11434", "localhost:11434", "host.docker.internal:11434")
     return "Ollama 本機模型" if any(item in base_url for item in local_markers) else "OpenAI 相容模型"
 

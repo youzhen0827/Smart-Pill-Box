@@ -25,6 +25,14 @@
 models/
 **/models/
 
+# The assembled model is generated from the Git LFS parts in models/parts.
+!models/
+!models/README.md
+!models/assemble_trained_model.ps1
+!models/parts/
+!models/parts/*.part*
+models/*.litertlm
+
 # Operating system files
 .DS_Store
 Thumbs.db

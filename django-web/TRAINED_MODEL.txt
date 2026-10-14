@@ -1,0 +1,7 @@
+模型檔名：MiniCPM5-2B_smartpill_trained_int8.litertlm
+預設位置：D:\Project Revision\models\MiniCPM5-2B_smartpill_trained_int8.litertlm
+LiteRT 後端：GPU（AGENT_LITERT_BACKEND=gpu）
+模型大小：2546936640 bytes
+SHA-256：646A5D14AA9D717602B798EFB09672F902547F3C9E2F1739372E50AA1160E92D
+
+執行 setup_minicpm.ps1 會驗證模型後啟用智慧藥盒訓練版 Agent。

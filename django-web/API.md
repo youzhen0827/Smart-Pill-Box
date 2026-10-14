@@ -91,7 +91,7 @@ POST /api/v1/sensors/events/
   "slot": 2,
   "event_type": "opened",
   "detected_at": "2026-07-10T18:31:12+08:00",
-  "source": "raspberry_pi_gpio"
+  "source": "esp32_usb_serial"
 }
 ```
 
@@ -101,9 +101,19 @@ POST /api/v1/sensors/events/
 opened
 closed
 heartbeat
+presence_detected
+presence_cleared
 ```
 
-`slot` 限制為 1=早、2=中、3=晚；`opened` 會配對時間最接近、裝置與格位相符的未完成任務。
+`slot` 限制為 1=早、2=中、3=晚；`opened` 會配對時間最接近、裝置與格位相符的未完成任務。PIR 的 `presence_detected`／`presence_cleared` 不需要格位，也不會標記為服藥。
+
+## ESP32 USB 硬體狀態
+
+```http
+GET /api/v1/hardware/state/?device_id=pillbox-01&user_name=王阿公
+```
+
+回傳左／中／右三格的 LED 狀態、蜂鳴器狀態與 USB 藥盒是否在線；`esp32_usb/serial_bridge.py` 每五秒同步一次。
 
 ## QA 醫療衛教
 

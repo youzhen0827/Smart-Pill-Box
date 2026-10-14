@@ -133,7 +133,7 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
         miniCpm.rewriteForSenior(
             draft = draft,
             onPreparing = {
-                onPreparingModel("正在準備手機內 MiniCPM5-2B；第一次使用需連接 Wi-Fi 下載約 1.55 GB…")
+                onPreparingModel("正在載入手機內的智慧藥盒訓練模型…")
             },
             onProgress = onPreparingModel,
             onSuccess = { generated ->

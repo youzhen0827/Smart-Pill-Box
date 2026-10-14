@@ -41,6 +41,11 @@ class ApiClient(baseUrl: String, private val token: String) {
 
     fun sendSensorEvent(payload: JSONObject): JSONObject = request("sensors/events/", "POST", payload)
 
+    fun hardwareState(deviceId: String, userName: String): JSONObject {
+        val query = "device_id=${encode(deviceId)}&user_name=${encode(userName)}"
+        return request("hardware/state/?$query")
+    }
+
     fun interventions(userName: String, state: String = "created"): JSONObject {
         val query = "user_name=${encode(userName)}&state=${encode(state)}"
         return request("agent/interventions/?$query")

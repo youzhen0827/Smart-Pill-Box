@@ -1,6 +1,6 @@
-請執行這個資料夾：8_aiagent_smart_medicine_box_Django_re
+請執行這個資料夾：8_ai_esp32_usb_smart_medicine_box_Django_re
 
-這是第 8 版 Hybrid AI Agent，並保留早／中／晚三格與原有資料。
+這是已訓練 MiniCPM5-2B＋ESP32 USB 第 8 版，並保留早／中／晚三格與原有資料。
 監控中心右側標題必須看到：
   早／中／晚三格藥盒感測狀態  三格版 v4
 導覽列左上角會看到：
@@ -8,13 +8,16 @@
 
 Windows 建議：
 1. conda activate venv_312
-2. python manage.py migrate
-3. powershell -ExecutionPolicy Bypass -File .\start_v8.ps1
-4. 瀏覽器重新整理 Ctrl+F5
+2. 第一次執行 powershell -ExecutionPolicy Bypass -File .\setup_minicpm.ps1
+   模型預設使用 LiteRT GPU 後端（AGENT_LITERT_BACKEND=gpu）
+3. python manage.py migrate
+4. 用 USB 線接上 ESP32
+5. powershell -ExecutionPolicy Bypass -File .\start_v8.ps1
+6. 瀏覽器重新整理 Ctrl+F5
 
 Android 模擬器 API：
   http://10.0.2.2:8000/api/v1/
 Token：
   smartpill-dev-token
 
-健康檢查 /api/v1/health/ 必須回傳 slot_count=3，slots=早/中/晚，ui_revision=8。
+健康檢查 /api/v1/health/ 必須回傳 slot_count=3、slots=早/中/晚、hardware_transport=usb_serial、ui_revision=8，agent 必須顯示 MiniCPM5-2B 狀態。

@@ -276,7 +276,13 @@ class PillBoxDevice(models.Model):
 
 
 class SensorEvent(models.Model):
-    EVENT_TYPES = [("opened", "藥盒開啟"), ("closed", "藥盒關閉"), ("heartbeat", "裝置心跳")]
+    EVENT_TYPES = [
+        ("opened", "藥盒開啟"),
+        ("closed", "藥盒關閉"),
+        ("heartbeat", "裝置心跳"),
+        ("presence_detected", "PIR 偵測到有人"),
+        ("presence_cleared", "PIR 未偵測到人"),
+    ]
 
     device_record = models.ForeignKey(
         PillBoxDevice,

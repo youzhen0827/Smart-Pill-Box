@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 from django.conf import settings
@@ -548,7 +548,11 @@ def agent_center(request):
         decision.validation_summary = validation.get("summary", "")
         decision.situation_summary = _decision_situation(decision)
         decision.next_step_summary = _decision_next_step(decision)
-        decision.notification_message = _decision_notification(decision)
+        notification = _decision_notification_intervention(decision)
+        decision.notification_message = notification.message if notification else ""
+        decision.notification_is_ai = bool(
+            notification and "trained_minicpm" in notification.channel
+        )
     events = SensorEvent.objects.filter(
         Q(device_record__owner=request.user) | Q(user_name__in=profile_names),
         slot__range=(1, SLOT_COUNT),
@@ -806,23 +810,28 @@ def _decision_next_step(decision) -> str:
     return "持續觀察時間、藥盒與人工確認結果。"
 
 
-def _decision_notification(decision) -> str:
+def _decision_notification_intervention(decision):
     intervention_types = {
         _TOOL_INTERVENTION_TYPES[tool]
         for tool in decision.planned_tools or []
         if tool in _TOOL_INTERVENTION_TYPES
     }
     if not intervention_types:
-        return ""
+        return None
     interventions = sorted(
         decision.reminder.interventions.all(),
         key=lambda item: item.created_at,
         reverse=True,
     )
     return next(
-        (item.message for item in interventions if item.intervention_type in intervention_types),
-        "",
+        (item for item in interventions if item.intervention_type in intervention_types),
+        None,
     )
+
+
+def _decision_notification(decision) -> str:
+    intervention = _decision_notification_intervention(decision)
+    return intervention.message if intervention else ""
 
 
 def _serialize_reminder(reminder):
@@ -927,6 +936,8 @@ def api_health(request):
             "slot_count": SLOT_COUNT,
             "slots": slot_payload(),
             "pillbox_layout": "early-noon-evening-3-slot",
+            "physical_slot_order": "left_to_right",
+            "hardware_transport": "usb_serial",
             "ui_revision": 8,
             "agent": agent_runtime_status(probe=True),
         }
@@ -1096,7 +1107,15 @@ def api_sensor_event(request):
             return JsonResponse({"error": "device_id 為必填。"}, status=400)
         event_type = str(data.get("event_type", "opened"))
         if event_type not in dict(SensorEvent.EVENT_TYPES):
-            return JsonResponse({"error": "event_type 必須是 opened、closed 或 heartbeat。"}, status=400)
+            return JsonResponse(
+                {
+                    "error": (
+                        "event_type 必須是 opened、closed、heartbeat、"
+                        "presence_detected 或 presence_cleared。"
+                    )
+                },
+                status=400,
+            )
         detected_at = _parse_dt(data.get("detected_at")) or timezone.now()
         user_name = str(data.get("user_name", "")).strip()
         owner = find_owner_by_android_name(user_name)
@@ -1137,6 +1156,101 @@ def api_sensor_event(request):
         )
     except (ValueError, TypeError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+
+
+@require_device_token
+@require_http_methods(["GET"])
+def api_hardware_state(request):
+    """Return the compact state consumed by the USB-to-ESP32 bridge."""
+
+    device_id = request.GET.get("device_id", "").strip()
+    if not device_id:
+        return JsonResponse({"error": "device_id 為必填。"}, status=400)
+
+    user_name = request.GET.get("user_name", "").strip()
+    now = timezone.now()
+    local_today = timezone.localtime(now).date()
+    online_window_seconds = 120
+    device = PillBoxDevice.objects.filter(device_id=device_id).first()
+    online = bool(
+        device
+        and device.is_active
+        and device.last_seen_at
+        and device.last_seen_at >= now - timedelta(seconds=online_window_seconds)
+    )
+
+    reminders = Reminder.objects.filter(
+        device_id=device_id,
+        slot__range=(1, SLOT_COUNT),
+    ).filter(
+        Q(scheduled_datetime__date=local_today)
+        | Q(scheduled_datetime__isnull=True, created_at__date=local_today)
+    )
+    if user_name:
+        reminders = reminders.filter(user_name__iexact=user_name)
+
+    reminders_by_slot = {slot: [] for slot in range(1, SLOT_COUNT + 1)}
+    for reminder in reminders.order_by("scheduled_datetime", "created_at")[:200]:
+        reminders_by_slot[reminder.slot].append(reminder)
+
+    slot_states = []
+    buzzer_on = False
+    for item in slot_payload():
+        slot = item["slot"]
+        scheduled = reminders_by_slot[slot]
+        outstanding = [reminder for reminder in scheduled if reminder.status != "已服藥"]
+        due = [
+            reminder
+            for reminder in outstanding
+            if reminder.status == "漏服"
+            or not reminder.scheduled_datetime
+            or reminder.scheduled_datetime <= now
+        ]
+        upcoming = [
+            reminder
+            for reminder in outstanding
+            if reminder.scheduled_datetime and reminder.scheduled_datetime > now
+        ]
+        current = due[0] if due else (upcoming[0] if upcoming else (scheduled[-1] if scheduled else None))
+
+        if not current:
+            state = "idle"
+        elif current.status == "已服藥":
+            state = "taken"
+        elif current.status == "漏服":
+            state = "missed"
+        elif current.scheduled_datetime and current.scheduled_datetime > now:
+            state = "scheduled"
+        else:
+            state = "due"
+
+        led_on = state in {"due", "missed"}
+        buzzer_on = buzzer_on or led_on
+        slot_states.append(
+            {
+                **item,
+                "position": {1: "left", 2: "middle", 3: "right"}[slot],
+                "state": state,
+                "led_on": led_on,
+                "reminder": _serialize_reminder(current) if current else None,
+            }
+        )
+
+    return JsonResponse(
+        {
+            "device_id": device_id,
+            "user_name": user_name,
+            "online": online,
+            "last_seen_at": _local_iso(device.last_seen_at) if device else None,
+            "online_window_seconds": online_window_seconds,
+            "transport": "usb_serial",
+            "cable": "usb_a_to_usb_c",
+            "slot_order": "left_to_right",
+            "slots": slot_states,
+            "buzzer_on": buzzer_on,
+            "poll_after_ms": 5000,
+        }
+    )
 
 
 @csrf_exempt

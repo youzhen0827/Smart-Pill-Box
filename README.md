@@ -2,7 +2,7 @@
 
 > 🚧 專案開發中
 
-結合邊緣運算與雲端平台的智慧藥盒系統，以 Raspberry Pi + ESP32 為硬體核心，整合 LLM AI Agent、語音互動與 RAG 藥物知識庫，協助長者安全、準時用藥。
+結合邊緣裝置與雲端平台的智慧藥盒系統。照片版實作只使用現有 ESP32、三格感測／燈號／發聲元件與一條 USB-A 轉 USB-C 線，透過電腦橋接 Django；不要求 Raspberry Pi 或新增硬體。系統另整合 AI Agent、Android 與 RAG 藥物知識庫，協助長者安全、準時用藥。
 
 ## 專案原始碼
 
@@ -10,11 +10,13 @@
 |---|---|
 |[`django-web/`](django-web/)|Django 網頁、REST API、服藥排程、AI Agent、語音衛教與資料集匯入|
 |[`android-app/`](android-app/)|可獨立查詢藥物衛教並與 Django 同步排程的 Android APP|
+|[`models/`](models/)|MiniCPM5-2B 智慧藥盒訓練模型分割檔、SHA-256 與自動還原腳本|
+|[`django-web/esp32_usb/`](django-web/esp32_usb/)|照片中 ESP32 的 USB 韌體、電腦橋接器與安裝說明|
 |[`docs/`](docs/)|系統架構與需求分析圖片|
 
 詳細安裝與執行方式請閱讀 [`django-web/README.md`](django-web/README.md) 與 [`android-app/README.md`](android-app/README.md)。
 
-> 本儲存庫不包含本機 SQLite 資料庫、帳號資料、密碼或 API 金鑰。藥物資料可依網頁專案說明，從 openFDA 即時同步或匯入合法取得的 Kaggle CSV。
+> 本儲存庫不包含本機 SQLite 資料庫、帳號資料、密碼或 API 金鑰。訓練模型以四個 Git LFS 分割檔保存，可由 `models\assemble_trained_model.ps1` 還原。藥物資料可依網頁專案說明，從 openFDA 即時同步或匯入合法取得的 Kaggle CSV。
 
 ## 第 8 版重點
 
@@ -43,12 +45,14 @@
 
 ### 邊緣裝置
 
+下圖是原始研究架構概念；目前照片版的實際資料路徑為 `ESP32 ↔ USB 線 ↔ 電腦橋接器 ↔ Django ↔ Android`。
+
 ![邊緣裝置框架設計](docs/edge_architecture.png)
 
 |元件               |說明                                     |
 |-----------------|---------------------------------------|
-|ESP32            |連接智慧藥盒硬體，收集感測器數據、偵測開蓋事件，透過 WiFi/MQTT 通訊|
-|Raspberry Pi     |邊緣運算核心，處理語音辨識較為方便                      |
+|ESP32            |連接照片中的三格藥盒硬體，偵測開蓋事件並經 USB 序列埠通訊|
+|電腦 USB 橋接器   |將 ESP32 序列事件送入 Django，並把提醒燈號／發聲狀態回傳 ESP32|
 |Whisper / TTS API|負責即時語音輸入（STT）與提醒輸出（TTS）                |
 |SQLite           |本地資料庫，負責排程緩存與離線紀錄                      |
 |SSH / VNC        |遠端連線，進行代碼部署與硬體除錯                       |
@@ -87,13 +91,12 @@
 
 **硬體**
 
-- Raspberry Pi
-- ESP32
+- 照片中的 ESP32 三格藥盒
+- 照片中的 USB-A 轉 USB-C 線
 
 **後端 / 雲端**
 
 - Django、PostgreSQL
-- MQTT Broker
 - REST API
 
 **AI / NLP**
@@ -111,7 +114,7 @@
 ## 開發進度
 
 - [ ] 硬體電路設計
-- [ ] ESP32 韌體開發
+- [x] ESP32 USB 韌體與 Django 橋接器
 - [ ] Raspberry Pi 語音模組
 - [x] Django 後端 API
 - [x] 可選用 LLM 的安全 Agent 規劃器與回答合理性檢查

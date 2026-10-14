@@ -1,4 +1,4 @@
-# 修改摘要：AI Agent v7
+# 修改摘要：MiniCPM5-2B＋ESP32 USB 第 8 版
 
 - 回答 Agent 會判斷問題、選擇資料、產生精簡回答，再獨立核對藥名、問題範圍、來源、中文、長度與安全性。
 - 合理性檢查會顯示 0～100 分；關鍵檢查失敗時不顯示可能錯誤的醫療內容。
@@ -7,7 +7,9 @@
 - AI Agent 追蹤加入日期、照護對象篩選與各階段數量。
 - 語音衛教依問題分成用途、副作用、服用方法、交互作用與警告。
 - Agent 只回答有來源的內容，並提供長輩可理解的下一步。
-- Android 與 Django 以 `ui_revision=8` 驗證連線版本。
+- Android 與 Django 以 `ui_revision=8`、`hardware_transport=usb_serial` 驗證連線版本。
+- 加入 ESP32 USB 韌體與電腦橋接器；實體左／中／右固定為早／中／晚。
+- 硬體腳位為幹簧管 18／19／21、LED 13／14／27、PIR 22、蜂鳴器 26。
 
 - 保留原本七個頁面、排版骨架、資料庫與三格藥盒 API。
 - 將排程、今日任務、Agent 追蹤與服藥結果的名稱和責任分開。
@@ -26,7 +28,7 @@
 - Android 會驗證 Django `/api/v1/health/` 是否確實為三格版，避免誤連舊後端。
 - Raspberry Pi 預設腳位為 `1:5,2:6,3:13`。
 
-第 8 版新增程式內 `MiniCPM5-2B` 混合 Agent、事件變更觸發、工具白名單、信心與依據驗證、繁體中文翻譯，以及失敗時安全回退；不需要 Ollama。
+第 8 版使用程式內 `MiniCPM5-2B` 混合 Agent，並整合照片中的 ESP32 USB 藥盒；不使用 Ollama。
 Agent 會主動建立到時提醒、再次提醒與漏服通知，時間沿用原排程設定。
 
 輸出檔：`8_aiagent_smart_medicine_box_Django_re.zip`

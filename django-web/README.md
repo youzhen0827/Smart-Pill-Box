@@ -4,7 +4,7 @@
 
 - Android REST API
 - 週期服藥排程與狀態追蹤 Agent
-- Raspberry Pi 早／中／晚三格藥盒開關感測事件
+- ESP32 USB 早／中／晚三格藥盒開關、PIR、LED 與蜂鳴器
 - 真實 FDA NDC Directory／Drug Label 資料同步
 - 使用者自行從 Kaggle 下載之真實 CSV 匯入與來源追溯
 - 以真實資料文件為證據的 RAG 醫療衛教 QA
@@ -36,7 +36,7 @@ python manage.py run_medication_agent
 
 Android 模擬器預設 API：`http://10.0.2.2:8000/api/v1/`
 
-實體 Android 手機與 Raspberry Pi 必須改用電腦區域網路 IP，例如：`http://192.168.1.100:8000/api/v1/`。
+實體 Android 手機必須改用電腦區域網路 IP，例如：`http://192.168.1.100:8000/api/v1/`；ESP32 經 USB 線由同一台電腦橋接。
 
 ## 2. Docker Compose（依 Week12 多容器模式）
 
@@ -220,9 +220,11 @@ Agent 循環：
   → 保存 AgentDecision 的理由與執行結果
 ```
 
-第 8 版預設使用程式內的 `MiniCPM5-2B`，不需要安裝或啟動 Ollama。服藥到時、逾時、裝置離線或高風險狀況會讓模型從白名單工具中選擇提醒動作。模型必須提供信心與觀察依據；輸出不合格或無法使用時會自動回到安全規則。模型不能修改藥品、劑量或排程。
+第 8 版固定使用已完成 LoRA 訓練並合併的 `MiniCPM5-2B-smartpill-trained`，不需要安裝或啟動 Ollama。服藥到時、逾時、裝置離線或高風險狀況會讓模型從白名單工具中選擇提醒動作。模型必須提供信心與觀察依據；輸出不合格或無法使用時會自動回到安全規則。模型不能修改藥品、劑量或排程。
 
 背景 Agent 每 15 秒檢查一次。服藥時間一到由 AI 選擇「到時提醒」，之後仍完全沿用每筆排程原有的「再次提醒分鐘」與「漏服判定分鐘」；模型失敗時安全規則會立即接手，不會因此漏發提醒。
+
+提醒文字也會由智慧藥盒訓練模型依每筆資料中的姓名、藥物、原排程劑量、逾時分鐘、藥盒連線與過去漏服情況即時生成。輸出通過安全檢查時，提醒追蹤頁會標示「訓練模型生成」；模型失敗或內容不合格時才標示「安全備援」。
 
 Windows 第一次使用：
 
@@ -231,13 +233,13 @@ Windows 第一次使用：
 python manage.py check_agent_model
 ```
 
-之後用下列指令同時啟動網站與背景提醒 Agent：
+之後用下列指令同時啟動網站、MiniCPM5-2B 背景提醒 Agent 與 ESP32 USB 橋接器：
 
 ```powershell
 .\start_v8.ps1
 ```
 
-模型會下載到上一層的 `models\MiniCPM5-2B_int4.litertlm`，之後可完全離線執行。Docker Compose 會掛載同一個模型檔。
+安裝程式會將下載資料夾中的訓練模型驗證並複製到上一層的 `models\MiniCPM5-2B_smartpill_trained_int8.litertlm`，之後可完全離線執行。此轉換檔預設以 `AGENT_LITERT_BACKEND=gpu` 執行，已在 RTX 3050 成功載入；Docker Compose 會掛載同一個模型檔。
 
 Docker 的 `agent` 服務會持續執行；本機開發也可手動執行一次：
 
@@ -245,7 +247,25 @@ Docker 的 `agent` 服務會持續執行；本機開發也可手動執行一次�
 python manage.py run_medication_agent --once
 ```
 
-## 7. Raspberry Pi
+## 7. ESP32 USB 實體藥盒
+
+本版本使用照片中的 ESP32、三格幹簧管、三顆 LED、PIR、蜂鳴器與一條 USB-A 轉 USB-C 線，不需要 Raspberry Pi 或其他硬體。
+
+```text
+幹簧管：早 GPIO 18／中 GPIO 19／晚 GPIO 21
+LED：早 GPIO 13／中 GPIO 14／晚 GPIO 27
+PIR：GPIO 22
+蜂鳴器：GPIO 26
+```
+
+完整燒錄與橋接說明請看 `esp32_usb/README.md`。ESP32 接上電腦後，`start_v8.ps1` 會同時啟動 USB 橋接器；也可手動執行：
+
+```powershell
+python esp32_usb/serial_bridge.py --list-ports
+python esp32_usb/serial_bridge.py --port COM5 --device-id pillbox-01 --user-name 王阿公
+```
+
+## 8. 舊 Raspberry Pi 研究程式（目前照片硬體不使用）
 
 完整程式與安裝說明在：
 
@@ -267,7 +287,7 @@ raspberry_pi/
       → 本機 Piper 或 eSpeak NG TTS
 ```
 
-## 8. API 驗證
+## 9. API 驗證
 
 除 health 以外，裝置 API 預設要求：
 

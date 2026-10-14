@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -18,6 +20,23 @@ from core.models import (
     SensorEvent,
 )
 from core.services.agent_planner import TOOL_LABELS, plan_agent_action
+from core.services.local_minicpm import LocalModelError, generate_medication_reminder
+
+
+logger = logging.getLogger(__name__)
+
+_BLOCKED_REMINDER_PATTERN = re.compile(
+    r"停藥|改藥|換藥|加量|減量|加倍|補吃|多吃|少吃|修改劑量|修改服藥時間|"
+    r"診斷|治療建議|保證|一定會"
+)
+_MODEL_META_PATTERN = re.compile(
+    r"AI模型|語言模型|訓練資料|提示詞|JSON|檢查分數|根據資料|作為.*助理",
+    re.IGNORECASE,
+)
+_SAFE_NEGATED_MEDICATION_CHANGE = re.compile(
+    r"(?:請勿|不要|勿|不可|避免)(?:自行)?"
+    r"(?:停藥|改藥|換藥|加量|減量|加倍|補吃|多吃|少吃|修改劑量|修改服藥時間)"
+)
 
 
 @dataclass
@@ -41,14 +60,20 @@ def _aware_for_date(target_date, target_time):
     return timezone.make_aware(value, timezone.get_current_timezone())
 
 
-def _create_intervention(reminder: Reminder, intervention_type: str, message: str):
+def _create_intervention(
+    reminder: Reminder,
+    intervention_type: str,
+    message: str,
+    *,
+    message_source: str = "safe_fallback",
+):
     obj, created = AgentIntervention.objects.get_or_create(
         reminder=reminder,
         intervention_type=intervention_type,
         defaults={
             "message": message,
             "state": "created",
-            "channel": "dashboard+device",
+            "channel": f"{message_source}+dashboard+device",
         },
     )
     return obj, created
@@ -252,7 +277,7 @@ def _tool_options(stage: str) -> tuple[list[str], list[str]]:
     return ["send_initial_reminder"], ["mark_probable_missed"]
 
 
-def _contextual_reminder_message(tool: str, reminder: Reminder, observation: dict) -> str:
+def _fallback_reminder_message(tool: str, reminder: Reminder, observation: dict) -> str:
     name = reminder.user_name or "您好"
     medicine = reminder.medicine_name
     dose = reminder.dose_count
@@ -260,7 +285,6 @@ def _contextual_reminder_message(tool: str, reminder: Reminder, observation: dic
     prior_missed = observation["prior_missed_30d"]
     device_offline = observation["device_health"] == "offline"
     local_time = timezone.localtime(reminder.scheduled_datetime).strftime("%H:%M")
-
     if tool == "send_initial_reminder":
         if device_offline:
             return (
@@ -304,9 +328,91 @@ def _contextual_reminder_message(tool: str, reminder: Reminder, observation: dic
         )
 
     return (
-        f"{name} 的 {medicine} 已超過原定時間 {observation['missed_after_minutes']} 分鐘，"
-        "仍沒有服藥證據，AI 已標記為疑似漏服，請照護者確認。"
+        f"{name}，已經過了服用 {medicine} 的時間，目前還沒有確認服藥。"
+        "麻煩家人或照護者先聯絡確認一下。"
     )
+
+
+def _normalize_generated_reminder(value: str) -> str:
+    message = re.sub(r"\s+", " ", str(value or "")).strip().strip('"「」')
+    message = re.sub(r"^(通知|提醒|提醒內容)\s*[：:]\s*", "", message)
+    return message.strip()
+
+
+def _generated_reminder_is_safe(
+    message: str,
+    *,
+    tool: str,
+    reminder: Reminder,
+    observation: dict,
+) -> bool:
+    if not 12 <= len(message) <= 180 or not re.search(r"[\u4e00-\u9fff]", message):
+        return False
+    safety_checked = _SAFE_NEGATED_MEDICATION_CHANGE.sub("", message)
+    if _BLOCKED_REMINDER_PATTERN.search(safety_checked) or _MODEL_META_PATTERN.search(message):
+        return False
+    if reminder.user_name and reminder.user_name not in message:
+        return False
+    if reminder.medicine_name and reminder.medicine_name not in message:
+        return False
+    if tool == "send_initial_reminder" and reminder.dose_count not in message:
+        return False
+
+    allowed_numbers = set(
+        re.findall(
+            r"\d+",
+            " ".join(
+                str(item)
+                for item in (
+                    reminder.dose_count,
+                    timezone.localtime(reminder.scheduled_datetime).strftime("%H %M"),
+                    observation.get("minutes_late", 0),
+                    observation.get("reminder_count", 0),
+                    observation.get("prior_missed_30d", 0),
+                    observation.get("grace_minutes", 10),
+                    observation.get("missed_after_minutes", 30),
+                    30,
+                )
+            ),
+        )
+    )
+    return set(re.findall(r"\d+", message)).issubset(allowed_numbers)
+
+
+def _contextual_reminder_message(
+    tool: str,
+    reminder: Reminder,
+    observation: dict,
+    *,
+    use_trained_model: bool,
+) -> tuple[str, str]:
+    fallback = _fallback_reminder_message(tool, reminder, observation)
+    if not use_trained_model:
+        return fallback, "safe_fallback"
+
+    try:
+        generated = generate_medication_reminder(
+            tool=tool,
+            user_name=reminder.user_name or "您好",
+            medicine_name=reminder.medicine_name,
+            dose_count=reminder.dose_count,
+            scheduled_time=timezone.localtime(reminder.scheduled_datetime).strftime("%H:%M"),
+            slot_name=slot_label(reminder.slot),
+            reminder_hint=reminder.reminder_hint,
+            observation=observation,
+        )
+        message = _normalize_generated_reminder(generated)
+        if _generated_reminder_is_safe(
+            message,
+            tool=tool,
+            reminder=reminder,
+            observation=observation,
+        ):
+            return message, "trained_minicpm"
+        logger.warning("MiniCPM5-2B reminder failed safety validation")
+    except (LocalModelError, ValueError, TypeError) as exc:
+        logger.warning("MiniCPM5-2B reminder generation failed: %s", exc)
+    return fallback, "safe_fallback"
 
 
 def _execute_agent_tool(
@@ -316,6 +422,7 @@ def _execute_agent_tool(
     result: AgentCycleResult,
     *,
     sensor_event: SensorEvent | None = None,
+    use_trained_model: bool = False,
 ) -> dict:
     result.tools_executed += 1
     if tool in {"wait_until_due", "wait_for_sensor"}:
@@ -325,53 +432,85 @@ def _execute_agent_tool(
         result.matched_sensor_events += 1
         return {"state": "completed", "event_id": sensor_event.id}
     if tool == "send_initial_reminder":
+        message, message_source = _contextual_reminder_message(
+            tool, reminder, observation, use_trained_model=use_trained_model
+        )
         _, created = _create_intervention(
             reminder,
             "initial_reminder",
-            _contextual_reminder_message(tool, reminder, observation),
+            message,
+            message_source=message_source,
         )
         if created:
             reminder.reminder_count += 1
             result.interventions_created += 1
-        return {"state": "created" if created else "already_exists"}
+        return {
+            "state": "created" if created else "already_exists",
+            "message_source": message_source,
+        }
     if tool == "send_followup_reminder":
+        message, message_source = _contextual_reminder_message(
+            tool, reminder, observation, use_trained_model=use_trained_model
+        )
         _, created = _create_intervention(
             reminder,
             "sensor_missing",
-            _contextual_reminder_message(tool, reminder, observation),
+            message,
+            message_source=message_source,
         )
         if created:
             reminder.reminder_count += 1
             result.interventions_created += 1
-        return {"state": "created" if created else "already_exists"}
+        return {
+            "state": "created" if created else "already_exists",
+            "message_source": message_source,
+        }
     if tool == "request_device_check":
+        message, message_source = _contextual_reminder_message(
+            tool, reminder, observation, use_trained_model=use_trained_model
+        )
         _, created = _create_intervention(
             reminder,
             "device_check",
-            _contextual_reminder_message(tool, reminder, observation),
+            message,
+            message_source=message_source,
         )
         if created:
             result.interventions_created += 1
-        return {"state": "created" if created else "already_exists"}
+        return {
+            "state": "created" if created else "already_exists",
+            "message_source": message_source,
+        }
     if tool == "escalate_caregiver":
+        message, message_source = _contextual_reminder_message(
+            tool, reminder, observation, use_trained_model=use_trained_model
+        )
         _, created = _create_intervention(
             reminder,
             "caregiver_escalation",
-            _contextual_reminder_message(tool, reminder, observation),
+            message,
+            message_source=message_source,
         )
         if created:
             result.interventions_created += 1
-        return {"state": "created" if created else "already_exists"}
+        return {
+            "state": "created" if created else "already_exists",
+            "message_source": message_source,
+        }
     if tool == "mark_probable_missed":
         newly_missed = reminder.status != "漏服"
         reminder.status = "漏服"
         reminder.agent_state = "missed"
         if newly_missed:
             result.missed_marked += 1
+        message, message_source = _contextual_reminder_message(
+            tool, reminder, observation, use_trained_model=use_trained_model
+        )
         _, created = _create_intervention(
             reminder,
             "missed_escalation",
-            _contextual_reminder_message(tool, reminder, observation),
+            message,
+            message_source=message_source,
         )
         if created:
             result.interventions_created += 1
@@ -386,7 +525,11 @@ def _execute_agent_tool(
                     "reminder_count": reminder.reminder_count,
                 },
             )
-        return {"state": "marked", "notification_created": created}
+        return {
+            "state": "marked",
+            "notification_created": created,
+            "message_source": message_source,
+        }
     return {"state": "rejected", "message": "工具不在允許清單"}
 
 
@@ -508,7 +651,12 @@ def run_agent_cycle(now=None) -> AgentCycleResult:
         )
         outcomes = {
             tool: _execute_agent_tool(
-                tool, reminder, observation, result, sensor_event=sensor_event
+                tool,
+                reminder,
+                observation,
+                result,
+                sensor_event=sensor_event,
+                use_trained_model=plan.planner.startswith("llm"),
             )
             for tool in plan.tools
         }

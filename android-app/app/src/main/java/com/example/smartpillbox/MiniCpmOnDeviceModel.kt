@@ -1,7 +1,6 @@
 package com.example.smartpillbox
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.os.Handler
 import android.os.Looper
 import com.google.ai.edge.litertlm.Backend
@@ -13,9 +12,6 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import java.io.Closeable
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URI
 import java.util.concurrent.Executors
 
 internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
@@ -114,6 +110,69 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
         }
     }
 
+    /**
+     * This is called from AgentReminderReceiver's background thread. It deliberately
+     * stays synchronous so the notification is shown only after the final text has
+     * passed the local safety checks.
+     */
+    fun generateMedicationReminder(
+        userName: String,
+        medicineName: String,
+        doseCount: String,
+        scheduledTime: String,
+        reminderHint: String,
+        stage: String,
+        minutesLate: Int
+    ): String {
+        ensureModel { }
+        val situation = when (stage) {
+            "followup" -> "已超過原訂時間 $minutesLate 分鐘，仍未確認服藥"
+            "missed" -> "已超過原訂時間 $minutesLate 分鐘，可能漏服，需要家人或照護者協助確認"
+            else -> "現在已到原訂服藥時間 $scheduledTime"
+        }
+        val hint = reminderHint.trim().takeIf { it.isNotBlank() }
+        val prompt = buildString {
+            append("姓名：$userName\n")
+            append("藥物：$medicineName\n")
+            append("劑量：$doseCount\n")
+            append("情況：$situation\n")
+            if (hint != null) append("原有提醒：$hint\n")
+            append("\n請只輸出通知正文，用一至兩句自然、溫和的繁體中文提醒。")
+            append("內容必須提到姓名、藥物與劑量，依目前情況提醒本人或照護者確認。")
+            append("不要加標題、條列、AI 自述、診斷，也不得建議停藥、補吃、加量、減量或改藥。")
+        }
+        val response = localEngine().createConversation(
+            ConversationConfig(
+                systemInstruction = Contents.of(
+                    "你是智慧藥盒的台灣照護提醒助理。語氣自然、有禮且簡短，只根據提供的服藥任務提醒，不做醫療決定。"
+                ),
+                samplerConfig = SamplerConfig(
+                    topK = 12,
+                    topP = 0.85,
+                    temperature = 0.35,
+                    seed = reminderSeed(userName, medicineName, stage)
+                ),
+                maxOutputToken = 96,
+                thinkingConfig = ThinkingConfig(enableThinking = false)
+            )
+        ).use { conversation ->
+            conversation.sendMessage(
+                prompt,
+                maxOutputToken = 96,
+                thinkingConfig = ThinkingConfig(enableThinking = false)
+            ).toString()
+        }
+        val cleaned = response
+            .replace(Regex("^(通知正文|提醒內容|回答)[:：]\\s*"), "")
+            .replace(Regex("[\\r\\n]+"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim(' ', '"', '\'', '「', '」')
+        if (!isReminderSafe(cleaned, userName, medicineName, doseCount)) {
+            error("訓練模型提醒未通過安全檢查，已改用安全提醒。")
+        }
+        return cleaned
+    }
+
     @Synchronized
     private fun localEngine(): Engine {
         engine?.let { return it }
@@ -145,60 +204,33 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
 
     private fun ensureModel(onProgress: (String) -> Unit) {
         modelDir.mkdirs()
-        if (modelFile.isFile && modelFile.length() >= MIN_MODEL_BYTES) return
-        val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        if (connectivity.isActiveNetworkMetered) {
-            error("首次使用需下載約 1.55 GB 的 MiniCPM5-2B，請先連接 Wi-Fi 再試。")
+        if (modelFile.isFile && modelFile.length() == EXPECTED_MODEL_BYTES) {
+            mainHandler.post { onProgress("已載入智慧藥盒訓練模型") }
+            return
         }
-
-        val partial = File(modelDir, "$MODEL_FILE.part")
-        val existing = partial.takeIf(File::isFile)?.length() ?: 0L
-        val connection = URI(MODEL_URL).toURL().openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 20_000
-            connection.readTimeout = 60_000
-            connection.setRequestProperty("User-Agent", "SmartMedicineBox-Android/2.1.8")
-            if (existing > 0L) connection.setRequestProperty("Range", "bytes=$existing-")
-            connection.connect()
-            val append = existing > 0L && connection.responseCode == HttpURLConnection.HTTP_PARTIAL
-            if (connection.responseCode !in 200..299) {
-                error("MiniCPM5-2B 下載失敗（HTTP ${connection.responseCode}）。")
-            }
-            val start = if (append) existing else 0L
-            val total = contentRangeTotal(connection).takeIf { it > 0L }
-                ?: (start + connection.contentLengthLong).takeIf { it > 0L }
-                ?: EXPECTED_MODEL_BYTES
-            var written = start
-            var lastPercent = -1
-            connection.inputStream.buffered().use { input ->
-                FileOutputStream(partial, append).buffered().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 8)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        output.write(buffer, 0, count)
-                        written += count
-                        val percent = ((written * 100L) / total).toInt().coerceIn(0, 100)
-                        if (percent >= lastPercent + 5) {
-                            lastPercent = percent
-                            mainHandler.post { onProgress("正在下載 MiniCPM5-2B：$percent%") }
-                        }
-                    }
-                }
-            }
-            if (partial.length() < MIN_MODEL_BYTES) error("模型下載不完整，請重新連線後再試。")
-            if (modelFile.exists()) modelFile.delete()
-            if (!partial.renameTo(modelFile)) error("模型儲存失敗，請確認手機空間足夠。")
-        } finally {
-            connection.disconnect()
-        }
+        if (modelFile.exists()) modelFile.delete()
+        error("找不到智慧藥盒訓練模型，請用 USB 執行 install_trained_model.ps1。")
     }
 
-    private fun contentRangeTotal(connection: HttpURLConnection): Long {
-        return connection.getHeaderField("Content-Range")
-            ?.substringAfterLast('/')
-            ?.toLongOrNull()
-            ?: 0L
+    private fun isReminderSafe(
+        text: String,
+        userName: String,
+        medicineName: String,
+        doseCount: String
+    ): Boolean {
+        if (text.isBlank() || text.length > 180) return false
+        if (!text.contains(userName) || !text.contains(medicineName)) return false
+        val doseToken = doseCount.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+        if (doseToken.isNotBlank() && !text.contains(doseToken)) return false
+        val prohibited = listOf(
+            "自行停藥", "停藥", "加倍", "加量", "減量", "改藥", "補吃",
+            "保證", "一定有效", "診斷為", "廣告", "促銷", "我是 AI", "作為 AI"
+        )
+        return prohibited.none(text::contains)
+    }
+
+    private fun reminderSeed(userName: String, medicineName: String, stage: String): Int {
+        return ("$userName|$medicineName|$stage".hashCode() and Int.MAX_VALUE).coerceAtLeast(1)
     }
 
     override fun close() {
@@ -208,10 +240,7 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
     }
 
     private companion object {
-        const val MODEL_FILE = "MiniCPM5-2B_int4.litertlm"
-        const val MODEL_URL =
-            "https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm?download=true"
-        const val MIN_MODEL_BYTES = 1_400_000_000L
-        const val EXPECTED_MODEL_BYTES = 1_550_000_000L
+        const val MODEL_FILE = "MiniCPM5-2B_smartpill_trained_int8.litertlm"
+        const val EXPECTED_MODEL_BYTES = 2_546_936_640L
     }
 }
