@@ -83,10 +83,7 @@ class AgentSyncReceiver : BroadcastReceiver() {
             val shown = AgentReminderReceiver.showNotification(
                 context,
                 notificationId,
-                AgentReminderReceiver.titleForType(
-                    type,
-                    item.optString("channel").contains("trained_minicpm")
-                ),
+                AgentReminderReceiver.titleForType(type),
                 item.optString("message")
             )
             if (shown) api.updateInterventionState(item.optInt("id"), "delivered")

@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
@@ -42,22 +43,22 @@
         <item name="android:textSize">18sp</item>
     </style>
 
-    <style name="PrimaryButton">
+    <!-- ⭕ 加上 parent="Widget.AppCompat.Button"，修復 InflateException 閃退 -->
+    <style name="PrimaryButton" parent="Widget.AppCompat.Button">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">56dp</item>
         <item name="android:layout_marginTop">10dp</item>
-        <item name="android:background">@drawable/section_button</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:textColor">#FFFFFF</item>
         <item name="android:textSize">18sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="SecondaryButton">
+    <!-- ⭕ 加上 parent="Widget.AppCompat.Button"，修復 InflateException 閃退 -->
+    <style name="SecondaryButton" parent="Widget.AppCompat.Button">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">56dp</item>
         <item name="android:layout_marginTop">8dp</item>
-        <item name="android:background">@drawable/secondary_button</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:textColor">@color/topbar_blue</item>
         <item name="android:textSize">18sp</item>

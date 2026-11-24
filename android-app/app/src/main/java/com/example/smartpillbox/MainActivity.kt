@@ -17,6 +17,7 @@ import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
+import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.AdapterView
 import android.widget.Button
@@ -28,6 +29,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONArray
@@ -38,6 +40,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Executors
+
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
@@ -213,6 +216,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         testConnection()
         loadTodayReminders()
         loadSchedules()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    101
+                )
+            }
+        }
+
+        // 取得裝置的 FCM Token 並印在 Logcat（若尚未設定 google-services.json 則安全略過）
+        try {
+            if (com.google.firebase.FirebaseApp.getApps(this).isNotEmpty()) {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val token = task.result
+                        Log.d("FCM_TOKEN", "👉 請複製這個 Token 到 Django 中使用: $token")
+                    }
+                }
+            } else {
+                Log.w("FCM_TOKEN", "⚠️ 尚未設定 google-services.json，略過 FCM 初始化")
+            }
+        } catch (e: Exception) {
+            Log.w("FCM_TOKEN", "⚠️ FCM 初始化失敗: ${e.message}")
+        }
     }
 
     private fun bindViews() {
@@ -856,42 +889,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun testConnection() {
         saveSettings()
-        val userName = editDefaultUser.text.toString().trim()
-        val deviceId = editDefaultDevice.text.toString().trim().ifBlank { DEFAULT_DEVICE }
         tvSettingsStatus.text = "正在測試 Django API…"
         executeApi(
-            task = {
-                val client = apiClient()
-                client.health().put("_hardware", client.hardwareState(deviceId, userName))
-            },
+            task = { apiClient().health() },
             onSuccess = { response ->
                 val count = response.optInt("dataset_documents")
                 val service = response.optString("service", "smart-medicine-box")
                 val slotCount = response.optInt("slot_count", -1)
                 val slots = response.optJSONArray("slots")
                 val layout = response.optString("pillbox_layout")
-                val physicalOrder = response.optString("physical_slot_order")
-                val hardwareTransport = response.optString("hardware_transport")
                 val uiRevision = response.optInt("ui_revision", -1)
                 val agent = response.optJSONObject("agent")
                 if (!SlotLabels.healthContractIsThreeSlot(slotCount, slots)
                     || layout != "early-noon-evening-3-slot"
-                    || physicalOrder != "left_to_right"
-                    || hardwareTransport != "usb_serial"
                     || uiRevision != REQUIRED_UI_REVISION
                 ) {
-                    tvSettingsStatus.text = "後端版本不符：請使用 MiniCPM5-2B＋ESP32 USB 第 8 版 Django。"
+                    tvSettingsStatus.text = "後端版本不符：請確認網頁程式與 App 版本相符。"
                     tvHeaderConnection.text = "Django API：版本不符"
                     return@executeApi
                 }
                 val agentMessage = agent?.optString("message")
                     ?.takeIf { it.isNotBlank() }
                     ?: "未取得 Agent 狀態。"
-                val hardware = response.optJSONObject("_hardware")
-                val usbOnline = hardware?.optBoolean("online", false) == true
-                val usbText = if (usbOnline) "USB 藥盒已上線" else "USB 藥盒尚未上線"
-                tvSettingsStatus.text = "連線成功：$service；MiniCPM5-2B＋ESP32 USB 第 8 版；$usbText；資料文件 $count 筆。\nHybrid AI Agent：$agentMessage"
-                tvHeaderConnection.text = "Django API：已連線 · $usbText"
+                tvSettingsStatus.text = "連線成功：$service；資料文件 $count 筆。\nHybrid AI Agent：$agentMessage"
+                tvHeaderConnection.text = "Django API：已連線"
             },
             onError = { message ->
                 tvSettingsStatus.text = connectionMessage(message)
@@ -932,7 +953,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             tvQaStatus.text = buildString {
                                 append("${result.questionLabel}｜採用 1 筆可追溯資料")
                                 append("｜來源：${result.sourceName}")
-                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 智慧藥盒訓練模型")
+                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 手機內模型")
                                 if (result.fromCache) append("｜已儲存在手機")
                             }
                             speakLatestAnswer()
@@ -1185,7 +1206,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try {
             startActivityForResult(intent, REQUEST_SPEECH)
         } catch (_: Exception) {
-            tvQaStatus.text = "此裝置沒有可用的語音辨識服務，請直接輸入文字。"
+            tvQaStatus.text = "此裝置沒有可用的語音辨識服務；可直接打字，或使用 Raspberry Pi 的本機 faster-whisper。"
         }
     }
 

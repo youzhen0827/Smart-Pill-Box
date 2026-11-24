@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "106711787583",
+    "project_id": "smartpillbox-41a4f",
+    "storage_bucket": "smartpillbox-41a4f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:106711787583:android:487525e02ffdd70986308a",
+        "android_client_info": {
+          "package_name": "com.example.smartpillbox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXb5Sjf_NwQA3HRwCbcpPFczckZ56yoGE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
