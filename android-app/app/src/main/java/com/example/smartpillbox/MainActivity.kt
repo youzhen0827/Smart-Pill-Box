@@ -980,16 +980,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun prepareOnDeviceModel() {
-        tvQaStatus.text = "正在檢查手機內 AI 模型…"
+        val initialMessage = if (BuildConfig.AUTO_DOWNLOAD_MODEL) {
+            "正在檢查手機內 AI 模型；若尚未安裝，將立即透過 Wi-Fi 自動下載約 1.55 GB。"
+        } else {
+            "正在檢查手機內 LoRA 訓練模型。"
+        }
+        tvQaStatus.text = initialMessage
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("正在準備 AI 模型")
+            .setMessage(initialMessage)
+            .setCancelable(false)
+            .setNegativeButton("在背景進行") { dialog, _ -> dialog.dismiss() }
+            .create()
+        progressDialog.show()
+
         medicationEducationAgent.prepareOnDeviceModel(
             onProgress = { status ->
                 tvQaStatus.text = status
+                if (progressDialog.isShowing) progressDialog.setMessage(status)
             },
             onReady = {
                 tvQaStatus.text = "MiniCPM5-2B 已準備完成，可離線問藥。"
+                if (progressDialog.isShowing) progressDialog.dismiss()
+                Toast.makeText(this, "AI 模型已準備完成", Toast.LENGTH_LONG).show()
             },
             onFailure = { message ->
                 tvQaStatus.text = message
+                if (progressDialog.isShowing) {
+                    progressDialog.setMessage(message)
+                    progressDialog.setButton(AlertDialog.BUTTON_POSITIVE, "知道了") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                }
             }
         )
     }

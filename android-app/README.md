@@ -49,7 +49,7 @@ App 直接使用 `HttpURLConnection` 呼叫 `smart_medicine_box_Django_re_1`：
 - APP 內建台灣食藥署未註銷藥品繁體中文索引，不需開啟網頁即可查用途與用法
 - 需要副作用、警告或交互作用時，由 APP 直接查 openFDA，不經 Django
 - MiniCPM5-2B 直接在手機內整理答案與翻譯繁體中文，不依賴網頁或 Ollama
-- 官方模型版第一次開啟 App 會在 Wi-Fi 下自動下載約 1.55 GB INT4 模型；下載完成後可離線推論
+- 官方模型版第一次開啟 App 會立即顯示下載視窗，並在 Wi-Fi 下自動下載約 1.55 GB INT4 模型；不需先送出問藥問題
 - LoRA 模型版使用智慧藥盒訓練後的 2.55 GB INT8 模型，透過 `tools/install_lora_test_version.ps1` 由 USB 安裝
 
 Android 13 以上第一次開啟時請允許通知；Android 12 以上若未允許精準鬧鐘，系統仍會提醒，但可能依省電設定稍微延後。
