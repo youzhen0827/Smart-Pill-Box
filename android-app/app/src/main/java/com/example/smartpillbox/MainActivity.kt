@@ -208,6 +208,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         loadSavedSettings()
         setupDateTimeFields()
         setupActions()
+        prepareOnDeviceModel()
         requestReminderPermission()
         AgentSyncScheduler.start(this)
 
@@ -976,6 +977,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
         }
+    }
+
+    private fun prepareOnDeviceModel() {
+        tvQaStatus.text = "正在檢查手機內 AI 模型…"
+        medicationEducationAgent.prepareOnDeviceModel(
+            onProgress = { status ->
+                tvQaStatus.text = status
+            },
+            onReady = {
+                tvQaStatus.text = "MiniCPM5-2B 已準備完成，可離線問藥。"
+            },
+            onFailure = { message ->
+                tvQaStatus.text = message
+            }
+        )
     }
 
     private fun formatEvidence(array: JSONArray?): String {

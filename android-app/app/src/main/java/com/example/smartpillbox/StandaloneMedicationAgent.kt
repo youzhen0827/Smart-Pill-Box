@@ -59,6 +59,14 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
             .build()
     )
 
+    fun prepareOnDeviceModel(
+        onProgress: (String) -> Unit,
+        onReady: () -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        miniCpm.prepareModel(onProgress, onReady, onFailure)
+    }
+
     fun fetchDraft(drug: String, question: String): MedicationEducationDraft {
         val kind = MedicationEducationLogic.detectQuestion(question)
         runCatching { tfdaIndex.find(drug, kind) }.getOrNull()?.let { match ->

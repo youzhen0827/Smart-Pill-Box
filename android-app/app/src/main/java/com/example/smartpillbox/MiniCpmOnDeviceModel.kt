@@ -24,8 +24,24 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
     private val executor = Executors.newSingleThreadExecutor()
     private val modelDir = appContext.getExternalFilesDir("models")
         ?: File(appContext.filesDir, "models")
-    private val modelFile = File(modelDir, MODEL_FILE)
+    private val modelFile = File(modelDir, BuildConfig.MODEL_FILE)
     private var engine: Engine? = null
+
+    fun prepareModel(
+        onProgress: (String) -> Unit,
+        onReady: () -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        executor.execute {
+            try {
+                ensureModel(onProgress)
+                mainHandler.post(onReady)
+            } catch (error: Exception) {
+                val message = error.message ?: "MiniCPM5-2B 暫時無法下載。"
+                mainHandler.post { onFailure(message) }
+            }
+        }
+    }
 
     fun rewriteForSenior(
         draft: MedicationEducationDraft,
@@ -145,15 +161,18 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
 
     private fun ensureModel(onProgress: (String) -> Unit) {
         modelDir.mkdirs()
-        if (modelFile.isFile && modelFile.length() >= MIN_MODEL_BYTES) return
+        if (modelFile.isFile && modelFile.length() >= BuildConfig.MIN_MODEL_BYTES) return
+        if (!BuildConfig.AUTO_DOWNLOAD_MODEL || BuildConfig.MODEL_URL.isBlank()) {
+            error("尚未安裝${BuildConfig.MODEL_DISPLAY_NAME}，請先用 USB 模型安裝工具傳入手機。")
+        }
         val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         if (connectivity.isActiveNetworkMetered) {
-            error("首次使用需下載約 1.55 GB 的 MiniCPM5-2B，請先連接 Wi-Fi 再試。")
+            error("首次使用需下載約 1.55 GB 的${BuildConfig.MODEL_DISPLAY_NAME}，請先連接 Wi-Fi 再試。")
         }
 
-        val partial = File(modelDir, "$MODEL_FILE.part")
+        val partial = File(modelDir, "${BuildConfig.MODEL_FILE}.part")
         val existing = partial.takeIf(File::isFile)?.length() ?: 0L
-        val connection = URI(MODEL_URL).toURL().openConnection() as HttpURLConnection
+        val connection = URI(BuildConfig.MODEL_URL).toURL().openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 20_000
             connection.readTimeout = 60_000
@@ -167,7 +186,7 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
             val start = if (append) existing else 0L
             val total = contentRangeTotal(connection).takeIf { it > 0L }
                 ?: (start + connection.contentLengthLong).takeIf { it > 0L }
-                ?: EXPECTED_MODEL_BYTES
+                ?: BuildConfig.EXPECTED_MODEL_BYTES
             var written = start
             var lastPercent = -1
             connection.inputStream.buffered().use { input ->
@@ -181,12 +200,12 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
                         val percent = ((written * 100L) / total).toInt().coerceIn(0, 100)
                         if (percent >= lastPercent + 5) {
                             lastPercent = percent
-                            mainHandler.post { onProgress("正在下載 MiniCPM5-2B：$percent%") }
+                            mainHandler.post { onProgress("正在下載${BuildConfig.MODEL_DISPLAY_NAME}：$percent%") }
                         }
                     }
                 }
             }
-            if (partial.length() < MIN_MODEL_BYTES) error("模型下載不完整，請重新連線後再試。")
+            if (partial.length() < BuildConfig.MIN_MODEL_BYTES) error("模型下載不完整，請重新連線後再試。")
             if (modelFile.exists()) modelFile.delete()
             if (!partial.renameTo(modelFile)) error("模型儲存失敗，請確認手機空間足夠。")
         } finally {
@@ -207,11 +226,4 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
         executor.shutdownNow()
     }
 
-    private companion object {
-        const val MODEL_FILE = "MiniCPM5-2B_int4.litertlm"
-        const val MODEL_URL =
-            "https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm?download=true"
-        const val MIN_MODEL_BYTES = 1_400_000_000L
-        const val EXPECTED_MODEL_BYTES = 1_550_000_000L
-    }
 }
