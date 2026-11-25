@@ -18,6 +18,18 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.util.concurrent.Executors
 
+internal object MiniCpmModelProvider {
+    @Volatile
+    private var sharedModel: MiniCpmOnDeviceModel? = null
+
+    fun get(context: Context): MiniCpmOnDeviceModel =
+        sharedModel ?: synchronized(this) {
+            sharedModel ?: MiniCpmOnDeviceModel(context.applicationContext).also {
+                sharedModel = it
+            }
+        }
+}
+
 internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -130,6 +142,76 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
         }
     }
 
+    fun generateMedicationReminder(
+        reminder: ReminderItem,
+        situation: String,
+        onSuccess: (String) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        executor.execute {
+            try {
+                ensureModel { }
+                val prompt = buildString {
+                    append("姓名：${reminder.userName}\n")
+                    append("藥物：${reminder.medicineName}\n")
+                    append("劑量：${reminder.doseCount}\n")
+                    append("預定時間：${reminder.scheduledTime}\n")
+                    append("服用備註：${reminder.reminderHint.ifBlank { "無" }}\n")
+                    append("目前狀況：$situation\n\n")
+                    append("請只輸出要直接顯示給長輩看的服藥提醒。")
+                    append("使用台灣繁體中文，先稱呼姓名，再自然提醒藥名與劑量，共一至二個簡短句子。")
+                    append("語氣要溫和、有關心但不說教；不得自行更改劑量、補吃、停藥或提供診斷。")
+                    append("不要輸出標題、欄位名稱、分析、引號或模型自述。")
+                }
+                val response = localEngine().createConversation(
+                    ConversationConfig(
+                        systemInstruction = Contents.of(
+                            "你是智慧藥盒的台灣長者服藥提醒助理。依照提供的姓名、藥物、劑量、時間與狀況，產生自然、尊重、簡短且安全的提醒。"
+                        ),
+                        samplerConfig = SamplerConfig(
+                            topK = 20,
+                            topP = 0.9,
+                            temperature = 0.35,
+                            seed = 23
+                        ),
+                        maxOutputToken = 96,
+                        thinkingConfig = ThinkingConfig(enableThinking = false)
+                    )
+                ).use { conversation ->
+                    conversation.sendMessage(
+                        prompt,
+                        maxOutputToken = 96,
+                        thinkingConfig = ThinkingConfig(enableThinking = false)
+                    ).toString()
+                }
+                val cleaned = sanitizeReminderResponse(response)
+                validateReminderResponse(reminder, cleaned)
+                mainHandler.post { onSuccess(cleaned) }
+            } catch (error: Exception) {
+                val message = error.message ?: "模型暫時無法產生提醒。"
+                mainHandler.post { onFailure(message) }
+            }
+        }
+    }
+
+    private fun sanitizeReminderResponse(response: String): String = response
+        .replace(Regex("(?m)^(回答|提醒|輸出)\\s*[：:]\\s*"), "")
+        .replace(Regex("[\\r\\n]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .trim('"', '\'', '「', '」')
+        .take(180)
+
+    private fun validateReminderResponse(reminder: ReminderItem, response: String) {
+        if (response.isBlank()) error("模型沒有產生提醒。")
+        if (!response.contains(reminder.userName)) error("模型提醒未包含姓名。")
+        if (!response.contains(reminder.medicineName)) error("模型提醒未包含藥名。")
+        val unsafePhrases = listOf(
+            "自行加量", "自行減量", "自行停藥", "多吃一", "補吃一", "改成兩", "不用問醫師"
+        )
+        if (unsafePhrases.any(response::contains)) error("模型提醒未通過用藥安全檢查。")
+    }
+
     @Synchronized
     private fun localEngine(): Engine {
         engine?.let { return it }
@@ -163,7 +245,7 @@ internal class MiniCpmOnDeviceModel(context: Context) : Closeable {
         modelDir.mkdirs()
         if (modelFile.isFile && modelFile.length() >= BuildConfig.MIN_MODEL_BYTES) return
         if (!BuildConfig.AUTO_DOWNLOAD_MODEL || BuildConfig.MODEL_URL.isBlank()) {
-            error("尚未安裝${BuildConfig.MODEL_DISPLAY_NAME}，請先用 USB 模型安裝工具傳入手機。")
+            error("尚未完整安裝${BuildConfig.MODEL_DISPLAY_NAME}，請先用 USB 或無線 ADB 將完整模型傳入手機。")
         }
         val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         if (connectivity.isActiveNetworkMetered) {

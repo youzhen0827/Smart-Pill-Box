@@ -54,7 +54,7 @@ internal data class MedicationEducationAnswer(
 internal class StandaloneMedicationAgent(context: Context) : Closeable {
     private val cache = context.getSharedPreferences("standalone_medication_education", Context.MODE_PRIVATE)
     private val tfdaIndex = TfdaDrugIndex(context.applicationContext)
-    private val miniCpm = MiniCpmOnDeviceModel(context.applicationContext)
+    private val miniCpm = MiniCpmModelProvider.get(context.applicationContext)
     private val translator: Translator = Translation.getClient(
         TranslatorOptions.Builder()
             .setSourceLanguage(TranslateLanguage.ENGLISH)
@@ -441,7 +441,6 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
     }
 
     override fun close() {
-        miniCpm.close()
         translator.close()
     }
 }

@@ -35,6 +35,7 @@ class AgentReminderReceiver : BroadcastReceiver() {
         val reminderId = intent.getIntExtra("reminder_id", 0)
         val userName = intent.getStringExtra("user_name").orEmpty()
         val stage = intent.getStringExtra("stage").orEmpty()
+        val modelGenerated = intent.getBooleanExtra("model_generated", false)
         var title = intent.getStringExtra("title").orEmpty().ifBlank { "AI Agent 服藥提醒" }
         var message = intent.getStringExtra("message").orEmpty()
         var deliveredInterventionId = 0
@@ -54,8 +55,13 @@ class AgentReminderReceiver : BroadcastReceiver() {
                 }
                 val intervention = findIntervention(api.interventions(userName), reminderId, stage)
                 if (intervention != null) {
-                    title = titleForType(intervention.optString("type"))
-                    message = intervention.optString("message", message)
+                    val interventionTitle = titleForType(intervention.optString("type"))
+                    title = if (modelGenerated) {
+                        "${BuildConfig.REMINDER_MODEL_LABEL}：${interventionTitle.substringAfter('：')}"
+                    } else {
+                        interventionTitle
+                    }
+                    if (!modelGenerated) message = intervention.optString("message", message)
                     deliveredInterventionId = intervention.optInt("id")
                 }
             }

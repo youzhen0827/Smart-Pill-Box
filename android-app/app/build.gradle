@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.smartpillbox"
         minSdk = 24
         targetSdk = 34
-        versionCode = 11
-        versionName = "2.1.11"
+        versionCode = 12
+        versionName = "2.1.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -27,6 +27,7 @@ android {
             buildConfigField "String", "MODEL_FILE", '"MiniCPM5-2B_int4.litertlm"'
             buildConfigField "String", "MODEL_URL", '"https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm?download=true"'
             buildConfigField "String", "MODEL_DISPLAY_NAME", '"MiniCPM5-2B 官方 INT4"'
+            buildConfigField "String", "REMINDER_MODEL_LABEL", '"官方模型"'
             buildConfigField "long", "MIN_MODEL_BYTES", "1400000000L"
             buildConfigField "long", "EXPECTED_MODEL_BYTES", "1550000000L"
             buildConfigField "boolean", "AUTO_DOWNLOAD_MODEL", "true"
@@ -38,6 +39,7 @@ android {
             buildConfigField "String", "MODEL_FILE", '"MiniCPM5-2B_smartpill_trained_int8.litertlm"'
             buildConfigField "String", "MODEL_URL", '""'
             buildConfigField "String", "MODEL_DISPLAY_NAME", '"智慧藥盒 LoRA 訓練 INT8"'
+            buildConfigField "String", "REMINDER_MODEL_LABEL", '"LoRA 模型"'
             buildConfigField "long", "MIN_MODEL_BYTES", "2546936640L"
             buildConfigField "long", "EXPECTED_MODEL_BYTES", "2546936640L"
             buildConfigField "boolean", "AUTO_DOWNLOAD_MODEL", "false"

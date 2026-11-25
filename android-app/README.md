@@ -50,7 +50,8 @@ App 直接使用 `HttpURLConnection` 呼叫 `smart_medicine_box_Django_re_1`：
 - 需要副作用、警告或交互作用時，由 APP 直接查 openFDA，不經 Django
 - MiniCPM5-2B 直接在手機內整理答案與翻譯繁體中文，不依賴網頁或 Ollama
 - 官方模型版第一次開啟 App 會立即顯示下載視窗，並在 Wi-Fi 下自動下載約 1.55 GB INT4 模型；不需先送出問藥問題
-- LoRA 模型版使用智慧藥盒訓練後的 2.55 GB INT8 模型，透過 `tools/install_lora_test_version.ps1` 由 USB 安裝
+- LoRA 模型版使用智慧藥盒訓練後的 2.55 GB INT8 模型，可透過 USB 或無線 ADB 安裝
+- 到時、再次提醒與逾時提醒會把姓名、藥物、劑量、時間、備註及目前狀況送入各版本模型，通知標題會標示「官方模型」或「LoRA 模型」
 - 問藥結果會顯示實際模型名稱、模型生成／安全備用回答，以及觸發備用流程的原因
 - 問藥準備訊息會依版本顯示官方 INT4 約 1.55 GB，或 LoRA 訓練 INT8 約 2.55 GB
 
@@ -100,10 +101,10 @@ smartpill-dev-token
 - Android Gradle Plugin 9.0.1（內建 Kotlin）
 - Gradle 9.1.0
 - JDK 17
-- compileSdk 36
-- targetSdk 36
+- compileSdk 34
+- targetSdk 34
 - minSdk 24
-- versionName 2.1.8
+- versionName 2.1.12
 
 ## 重要限制
 

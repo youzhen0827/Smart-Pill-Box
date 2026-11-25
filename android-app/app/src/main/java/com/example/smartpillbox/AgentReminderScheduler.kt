@@ -7,10 +7,13 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import java.text.SimpleDateFormat
+import java.util.Collections
 import java.util.Locale
 
 internal object AgentReminderScheduler {
     private const val ACTION_REMIND = "com.example.smartpillbox.AGENT_REMIND"
+    private const val CACHE_NAME = "ai_generated_reminder_messages"
+    private val generationInFlight = Collections.synchronizedSet(mutableSetOf<String>())
 
     fun scheduleAll(context: Context, reminders: List<ReminderItem>) {
         reminders.forEach { reminder ->
@@ -26,25 +29,73 @@ internal object AgentReminderScheduler {
                 name = "due",
                 triggerAt = dueAt,
                 title = "AI Agent：現在該吃藥了",
-                message = "${reminder.userName}，請服用 ${reminder.medicineName} ${reminder.doseCount}。${reminder.reminderHint}"
+                message = "${reminder.userName}，請服用 ${reminder.medicineName} ${reminder.doseCount}。${reminder.reminderHint}",
+                situation = "現在已到預定服藥時間，尚未確認服藥。"
             ),
             AlarmStage(
                 code = 2,
                 name = "followup",
                 triggerAt = dueAt + reminder.graceMinutes * 60_000L,
                 title = "AI Agent：請確認是否已吃藥",
-                message = "已超過服藥時間 ${reminder.graceMinutes} 分鐘，尚未確認服藥，請查看藥盒。"
+                message = "${reminder.userName}，已超過服藥時間 ${reminder.graceMinutes} 分鐘，尚未確認服用 ${reminder.medicineName}，請查看藥盒。",
+                situation = "已超過預定服藥時間 ${reminder.graceMinutes} 分鐘，尚未確認服藥。"
             ),
             AlarmStage(
                 code = 3,
                 name = "missed",
                 triggerAt = dueAt + reminder.missedAfterMinutes * 60_000L,
                 title = "AI Agent：需要照護者確認",
-                message = "已超過服藥時間 ${reminder.missedAfterMinutes} 分鐘，請家人或照護者確認是否已服藥。"
+                message = "${reminder.userName}，已超過服藥時間 ${reminder.missedAfterMinutes} 分鐘，請家人或照護者確認是否已服用 ${reminder.medicineName}。",
+                situation = "已超過預定服藥時間 ${reminder.missedAfterMinutes} 分鐘，仍未確認服藥，需要家人或照護者協助確認。"
             )
         )
-        stages.forEach { stage -> scheduleStage(context, reminder, stage) }
+        stages.forEach { stage ->
+            scheduleStage(context, reminder, stage)
+            generateAndReschedule(context.applicationContext, reminder, stage)
+        }
     }
+
+    private fun generateAndReschedule(context: Context, reminder: ReminderItem, stage: AlarmStage) {
+        if (stage.triggerAt <= System.currentTimeMillis()) return
+        val key = "${BuildConfig.MODEL_FILE}:${reminder.id}:${stage.code}:${stage.triggerAt}"
+        val cache = context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
+        cache.getString(key, null)?.takeIf(String::isNotBlank)?.let { cached ->
+            scheduleStage(
+                context,
+                reminder,
+                stage.copy(
+                    title = modelTitle(stage),
+                    message = cached,
+                    modelGenerated = true
+                )
+            )
+            return
+        }
+        if (!generationInFlight.add(key)) return
+        MiniCpmModelProvider.get(context).generateMedicationReminder(
+            reminder = reminder,
+            situation = stage.situation,
+            onSuccess = { generated ->
+                cache.edit().putString(key, generated).apply()
+                scheduleStage(
+                    context,
+                    reminder,
+                    stage.copy(
+                        title = modelTitle(stage),
+                        message = generated,
+                        modelGenerated = true
+                    )
+                )
+                generationInFlight.remove(key)
+            },
+            onFailure = {
+                generationInFlight.remove(key)
+            }
+        )
+    }
+
+    private fun modelTitle(stage: AlarmStage): String =
+        "${BuildConfig.REMINDER_MODEL_LABEL}：${stage.title.substringAfter('：')}"
 
     fun cancel(context: Context, reminderId: Int) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
@@ -67,6 +118,7 @@ internal object AgentReminderScheduler {
             .putExtra("stage", stage.name)
             .putExtra("title", stage.title)
             .putExtra("message", stage.message)
+            .putExtra("model_generated", stage.modelGenerated)
         val pending = pendingIntent(
             context,
             reminder.id,
@@ -115,6 +167,8 @@ internal object AgentReminderScheduler {
         val name: String,
         val triggerAt: Long,
         val title: String,
-        val message: String
+        val message: String,
+        val situation: String,
+        val modelGenerated: Boolean = false
     )
 }
