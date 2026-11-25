@@ -52,6 +52,7 @@ App 直接使用 `HttpURLConnection` 呼叫 `smart_medicine_box_Django_re_1`：
 - 官方模型版第一次開啟 App 會立即顯示下載視窗，並在 Wi-Fi 下自動下載約 1.55 GB INT4 模型；不需先送出問藥問題
 - LoRA 模型版使用智慧藥盒訓練後的 2.55 GB INT8 模型，透過 `tools/install_lora_test_version.ps1` 由 USB 安裝
 - 問藥結果會顯示實際模型名稱、模型生成／安全備用回答，以及觸發備用流程的原因
+- 問藥準備訊息會依版本顯示官方 INT4 約 1.55 GB，或 LoRA 訓練 INT8 約 2.55 GB
 
 Android 13 以上第一次開啟時請允許通知；Android 12 以上若未允許精準鬧鐘，系統仍會提醒，但可能依省電設定稍微延後。
 - Agent 先判斷問題，再檢查藥名、回答範圍、資料來源、中文、長度與安全性

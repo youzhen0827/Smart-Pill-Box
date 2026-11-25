@@ -144,7 +144,12 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
         miniCpm.rewriteForSenior(
             draft = draft,
             onPreparing = {
-                onPreparingModel("正在準備手機內 MiniCPM5-2B；第一次使用需連接 Wi-Fi 下載約 1.55 GB…")
+                val status = if (BuildConfig.AUTO_DOWNLOAD_MODEL) {
+                    "正在準備手機內${BuildConfig.MODEL_DISPLAY_NAME}；尚未安裝時會透過 Wi-Fi 下載約 1.55 GB…"
+                } else {
+                    "正在載入手機內${BuildConfig.MODEL_DISPLAY_NAME}（約 2.55 GB）…"
+                }
+                onPreparingModel(status)
             },
             onProgress = onPreparingModel,
             onSuccess = { generated ->
