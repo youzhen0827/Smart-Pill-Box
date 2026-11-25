@@ -39,6 +39,9 @@ internal data class MedicationEducationAnswer(
     val evidence: String,
     val questionLabel: String,
     val usedDownloadedModel: Boolean,
+    val modelName: String,
+    val answerMode: String,
+    val fallbackReason: String,
     val fromCache: Boolean,
     val qualityPassed: Boolean,
     val qualityMessage: String,
@@ -145,16 +148,24 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
             },
             onProgress = onPreparingModel,
             onSuccess = { generated ->
-                onSuccess(composeAnswer(draft, generated, usedDownloadedModel = true))
+                onSuccess(
+                    composeAnswer(
+                        draft = draft,
+                        translatedText = generated,
+                        usedDownloadedModel = true,
+                        answerMode = "AI 模型生成"
+                    )
+                )
             },
-            onFailure = {
-                fallbackAnswerInChinese(draft, onPreparingModel, onSuccess, onFailure)
+            onFailure = { reason ->
+                fallbackAnswerInChinese(draft, reason, onPreparingModel, onSuccess, onFailure)
             }
         )
     }
 
     private fun fallbackAnswerInChinese(
         draft: MedicationEducationDraft,
+        modelFailureReason: String,
         onPreparingModel: (String) -> Unit,
         onSuccess: (MedicationEducationAnswer) -> Unit,
         onFailure: (String) -> Unit
@@ -164,13 +175,23 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
                 composeAnswer(
                     draft,
                     MedicationEducationLogic.simplifyChinese(draft.sourceText),
-                    usedDownloadedModel = false
+                    usedDownloadedModel = false,
+                    answerMode = "安全備用回答（食藥署資料整理）",
+                    fallbackReason = modelFailureReason
                 )
             )
             return
         }
         MedicationEducationLogic.offlineTranslation(draft.sourceText)?.let { translated ->
-            onSuccess(composeAnswer(draft, translated, usedDownloadedModel = false))
+            onSuccess(
+                composeAnswer(
+                    draft = draft,
+                    translatedText = translated,
+                    usedDownloadedModel = false,
+                    answerMode = "安全備用回答（內建離線翻譯）",
+                    fallbackReason = modelFailureReason
+                )
+            )
             return
         }
 
@@ -180,7 +201,15 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
                 translateChunks(
                     MedicationEducationLogic.translationChunks(draft.sourceText),
                     onSuccess = { translated ->
-                        onSuccess(composeAnswer(draft, translated, usedDownloadedModel = false))
+                        onSuccess(
+                            composeAnswer(
+                                draft = draft,
+                                translatedText = translated,
+                                usedDownloadedModel = false,
+                                answerMode = "安全備用回答（ML Kit 翻譯）",
+                                fallbackReason = modelFailureReason
+                            )
+                        )
                     },
                     onFailure = {
                         onFailure("手機內翻譯失敗，請確認儲存空間足夠後再試。")
@@ -214,7 +243,9 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
     private fun composeAnswer(
         draft: MedicationEducationDraft,
         translatedText: String,
-        usedDownloadedModel: Boolean
+        usedDownloadedModel: Boolean,
+        answerMode: String,
+        fallbackReason: String = ""
     ): MedicationEducationAnswer {
         val questionLabel = MedicationEducationLogic.label(draft.kind)
         val sectionLabel = MedicationEducationLogic.sectionLabel(draft.sectionField)
@@ -263,11 +294,23 @@ internal class StandaloneMedicationAgent(context: Context) : Closeable {
             if (draft.sourceId.isNotBlank()) append("資料編號：${draft.sourceId}\n")
             append(draft.sourceUrl)
         }
+        val finalAnswerMode = if (review.passed) {
+            answerMode
+        } else {
+            "安全備用回答（品質檢查未通過）"
+        }
+        val finalFallbackReason = buildList {
+            if (fallbackReason.isNotBlank()) add(fallbackReason)
+            if (!review.passed) add(review.message)
+        }.joinToString("；")
         return MedicationEducationAnswer(
             answer = answer,
             evidence = evidence,
             questionLabel = questionLabel,
             usedDownloadedModel = usedDownloadedModel,
+            modelName = BuildConfig.MODEL_DISPLAY_NAME,
+            answerMode = finalAnswerMode,
+            fallbackReason = finalFallbackReason,
             fromCache = draft.fromCache,
             qualityPassed = review.passed,
             qualityMessage = review.message,

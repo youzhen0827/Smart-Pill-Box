@@ -949,13 +949,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             btnAskQa.isEnabled = true
                             latestAnswer = result.answer
                             tvQaAnswer.text = latestAnswer
-                            tvQaEvidence.text = result.evidence
+                            tvQaEvidence.text = buildString {
+                                append(result.evidence)
+                                append("\n\n模型診斷：\n")
+                                append("模型：${result.modelName}\n")
+                                append("回答方式：${result.answerMode}")
+                                if (result.fallbackReason.isNotBlank()) {
+                                    append("\n備用原因：${result.fallbackReason}")
+                                }
+                            }
                             btnSpeakAnswer.isEnabled = latestAnswer.isNotBlank()
                             tvQaStatus.text = buildString {
                                 append("${result.questionLabel}｜採用 1 筆可追溯資料")
                                 append("｜來源：${result.sourceName}")
-                                if (result.usedDownloadedModel) append("｜MiniCPM5-2B 手機內模型")
+                                append("｜模型：${result.modelName}")
+                                append("｜${result.answerMode}")
                                 if (result.fromCache) append("｜已儲存在手機")
+                                if (result.fallbackReason.isNotBlank()) {
+                                    append("\n備用原因：${result.fallbackReason}")
+                                }
                             }
                             speakLatestAnswer()
                         },
